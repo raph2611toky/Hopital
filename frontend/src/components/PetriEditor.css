@@ -1,0 +1,26 @@
+.petri-editor {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 300px;
+  padding: 10px;
+  border-left: 1px solid gray;
+  overflow-y: auto;
+}
+
+.fireable {
+  border: 2px solid green !important;
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background: #000;
+  border: 1px solid #fff;
+}
+
+.react-flow__edge-path {
+  cursor: pointer;
+}
