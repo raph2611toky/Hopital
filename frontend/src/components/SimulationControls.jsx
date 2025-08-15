@@ -1,15 +1,22 @@
-// src/components/SimulationControls.js
-import { Button, Group } from '@mantine/core';
-import { Play, Pause, StepForward } from 'lucide-react';
+"use client"
+import "./SimulationControls.css"
 
-const SimulationControls = ({ onPlay, onPause, onStep, onExport }) => (
-  <Group>
-    <Button leftIcon={<Play />} onClick={onPlay}>Play</Button>
-    <Button leftIcon={<Pause />} onClick={onPause}>Pause</Button>
-    <Button leftIcon={<StepForward />} onClick={onStep}>Step</Button>
-    <Button onClick={onExport}>Export PNG</Button>
-    <Button onClick={onExport}>Export JSON</Button>
-  </Group>
-);
+const SimulationControls = ({ onPlay, onPause, onStep, isPlaying }) => {
+  return (
+    <div className="simulation-controls">
+      <button
+        className={`control-button ${isPlaying ? "active" : ""}`}
+        onClick={isPlaying ? onPause : onPlay}
+        title={isPlaying ? "Pause" : "Play"}
+      >
+        {isPlaying ? "⏸" : "▶"}
+      </button>
 
-export default SimulationControls;
+      <button className="control-button" onClick={onStep} title="Step" disabled={isPlaying}>
+        ⏭
+      </button>
+    </div>
+  )
+}
+
+export default SimulationControls

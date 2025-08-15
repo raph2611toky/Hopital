@@ -1,26 +1,165 @@
 .petri-editor {
-  display: flex;
   height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.editor-header h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.header-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.editor-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Custom canvas container styles replacing ReactFlow */
+.canvas-container {
+  flex: 1;
+  position: relative;
+  background: #f8fafc;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.canvas-container:active {
+  cursor: grabbing;
+}
+
+.canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+  transition: transform 0.1s ease-out;
+}
+
+.grid-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 200%;
+  background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: 0 0;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.temp-arc {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 100;
 }
 
 .sidebar {
-  width: 300px;
-  padding: 10px;
-  border-left: 1px solid gray;
+  width: 320px;
+  background: white;
+  border-left: 1px solid #e2e8f0;
   overflow-y: auto;
+  box-shadow: -2px 0 4px -1px rgba(0, 0, 0, 0.1);
 }
 
-.fireable {
-  border: 2px solid green !important;
+/* Zoom indicator */
+.zoom-indicator {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  backdrop-filter: blur(4px);
 }
 
-.react-flow__handle {
-  width: 8px;
-  height: 8px;
-  background: #000;
-  border: 1px solid #fff;
+/* Instructions overlay */
+.instructions {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(59, 130, 246, 0.95);
+  color: white;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  max-width: 300px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-.react-flow__edge-path {
-  cursor: pointer;
+.instructions h4 {
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+}
+
+.instructions ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.instructions li {
+  margin-bottom: 0.25rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 280px;
+  }
+
+  .editor-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .editor-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .instructions {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .editor-content {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: 300px;
+    border-left: none;
+    border-top: 1px solid #e2e8f0;
+  }
 }

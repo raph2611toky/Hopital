@@ -1,85 +1,97 @@
 export class PetriNet {
   constructor() {
-    this.places = {};
-    this.transitions = {};
-    this.arcs = [];
-    this.marking = {};
+    this.places = {}
+    this.transitions = {}
+    this.arcs = {}
+    this.marking = {}
   }
 
   addPlace(place) {
-    this.places[place.id] = place;
-    this.marking[place.id] = place.tokens || 0;
+    this.places[place.id] = place
+    this.marking[place.id] = place.tokens || 0
   }
 
-  addTransition(trans) {
-    this.transitions[trans.id] = trans;
+  addTransition(transition) {
+    this.transitions[transition.id] = transition
   }
 
   addArc(arc) {
-    this.arcs.push(arc);
+    this.arcs[arc.id] = arc
   }
 
-  getInputs(transId) {
-    return this.arcs.filter(a => a.target === transId);
+  removePlace(id) {
+    delete this.places[id]
+    delete this.marking[id]
   }
 
-  getOutputs(transId) {
-    return this.arcs.filter(a => a.source === transId);
+  removeTransition(id) {
+    delete this.transitions[id]
   }
 
-  isFireable(transId) {
-    const inputs = this.getInputs(transId);
-    for (const arc of inputs) {
+  removeArc(id) {
+    delete this.arcs[id]
+  }
+
+  isTransitionEnabled(transitionId) {
+    const inputArcs = Object.values(this.arcs).filter((arc) => arc.target === transitionId)
+
+    for (const arc of inputArcs) {
+      const place = this.places[arc.source]
+      if (!place) continue
+
+      const tokens = this.marking[arc.source] || 0
+
       if (arc.isInhibitor) {
-        if (this.marking[arc.source] >= arc.weight) return false;
+        if (tokens >= arc.weight) return false
       } else {
-        if (this.marking[arc.source] < arc.weight) return false;
+        if (tokens < arc.weight) return false
       }
     }
-    return true;
+
+    return true
   }
 
-  fire(transId) {
-    if (!this.isFireable(transId)) return;
-    const inputs = this.getInputs(transId);
-    const outputs = this.getOutputs(transId);
-    inputs.forEach(arc => {
+  fireTransition(transitionId) {
+    if (!this.isTransitionEnabled(transitionId)) return false
+
+    const inputArcs = Object.values(this.arcs).filter((arc) => arc.target === transitionId)
+    const outputArcs = Object.values(this.arcs).filter((arc) => arc.source === transitionId)
+
+    // Consommer les jetons des places d'entrée
+    for (const arc of inputArcs) {
       if (!arc.isInhibitor) {
-        this.marking[arc.source] -= arc.weight;
+        this.marking[arc.source] = Math.max(0, (this.marking[arc.source] || 0) - arc.weight)
       }
-      if (arc.isReset) this.marking[arc.source] = 0;
-    });
-    outputs.forEach(arc => {
-      this.marking[arc.target] = (this.marking[arc.target] || 0) + arc.weight;
-      const place = this.places[arc.target];
-      if (place.capacity && this.marking[arc.target] > place.capacity) {
-        alert(`Capacity exceeded for ${place.label}!`);
-        this.marking[arc.target] = place.capacity;
-      }
-    });
+    }
+
+    // Produire des jetons dans les places de sortie
+    for (const arc of outputArcs) {
+      this.marking[arc.target] = (this.marking[arc.target] || 0) + arc.weight
+    }
+
+    return true
   }
 
-  simulateStep(onUpdate) {
-    const fireable = Object.keys(this.transitions)
-      .filter(t => this.isFireable(t))
-      .sort((a, b) => this.transitions[b].priority - this.transitions[a].priority);
-    if (fireable.length === 0) {
-      alert('Deadlock detected!');
-      return;
-    }
-    const trans = this.transitions[fireable[0]];
-    if (trans.type === 'timed') {
-      setTimeout(() => {
-        this.fire(fireable[0]);
-        onUpdate();
-      }, trans.delay + Math.random() * trans.delay * 0.2);
-    } else {
-      this.fire(fireable[0]);
-      onUpdate();
+  simulateStep(callback) {
+    const enabledTransitions = Object.keys(this.transitions).filter((id) => this.isTransitionEnabled(id))
+
+    if (enabledTransitions.length > 0) {
+      const randomTransition = enabledTransitions[Math.floor(Math.random() * enabledTransitions.length)]
+      this.fireTransition(randomTransition)
+      if (callback) callback()
     }
   }
 
   toJSON() {
-    return JSON.stringify({ places: this.places, transitions: this.transitions, arcs: this.arcs, marking: this.marking });
+    return JSON.stringify(
+      {
+        places: this.places,
+        transitions: this.transitions,
+        arcs: this.arcs,
+        marking: this.marking,
+      },
+      null,
+      2,
+    )
   }
 }

@@ -1,0 +1,62 @@
+.custom-edge {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.custom-edge:hover {
+  stroke: #3b82f6 !important;
+  stroke-width: 2 !important;
+}
+
+.custom-edge.selected {
+  stroke: #3b82f6 !important;
+  stroke-width: 2 !important;
+}
+
+.custom-edge.inhibitor {
+  stroke-dasharray: 8, 4 !important;
+}
+
+.edge-label-container {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.25rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.edge-label {
+  padding: 0.25rem 0.5rem;
+  min-width: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #374151;
+}
+
+.edge-label:hover {
+  background: #f3f4f6;
+  border-color: #3b82f6;
+}
+
+.edge-label.visible {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.edge-weight-input {
+  width: 50px;
+  padding: 0.25rem;
+  border: 2px solid #3b82f6;
+  border-radius: 0.25rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  outline: none;
+}
+
+.edge-weight-input:focus {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}

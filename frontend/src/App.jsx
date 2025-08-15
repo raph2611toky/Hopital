@@ -1,8 +1,12 @@
-import PetriEditor from './components/PetriEditor';
-import './index.css';
+import PetriEditor from "./components/PetriEditor"
+import "./App.css"
 
 function App() {
-  return <PetriEditor />;
+  return (
+    <div className="App">
+      <PetriEditor />
+    </div>
+  )
 }
 
-export default App;
+export default App

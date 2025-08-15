@@ -1,0 +1,97 @@
+.transition {
+  position: absolute;
+  width: 30px;
+  height: 50px;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.transition-rect {
+  width: 30px;
+  height: 50px;
+  border: 3px solid #374151;
+  background: #ffffff;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.transition:hover .transition-rect {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.transition.selected .transition-rect {
+  border-color: #3b82f6;
+  border-width: 4px;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.transition.connecting .transition-rect {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+
+.transition-label {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+}
+
+.transition-timer {
+  font-size: 16px;
+  color: #f59e0b;
+}
+
+/* Points de connexion */
+.connection-point {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #3b82f6;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.transition:hover .connection-point,
+.transition.connecting .connection-point {
+  opacity: 1;
+}
+
+.connection-point.top {
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.connection-point.right {
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.connection-point.bottom {
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.connection-point.left {
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
