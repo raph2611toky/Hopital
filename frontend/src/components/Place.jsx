@@ -149,7 +149,6 @@ const Place = ({
       }
     }
 
-    // Ajouter le compteur pour les jetons cachés, mieux centré
     if (hiddenTokens > 0) {
       tokens.push(
         <div
@@ -161,7 +160,6 @@ const Place = ({
             right: "5px",
             fontSize: "10px",
             fontWeight: "bold",
-            color: "#333",
           }}
         >
           +{hiddenTokens}
