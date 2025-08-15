@@ -59,23 +59,7 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
         x: target.position.x - unitX * radius,
         y: target.position.y - unitY * radius,
       };
-    } else if (isTargetTransition) {
-      const targetTransition = transitions.find((t) => t.id === target.id);
-      const isLandscape = targetTransition?.orientation === "landscape";
-      const halfWidth = isLandscape ? 25 : 15;
-      const halfHeight = isLandscape ? 15 : 25;
-      const tX = halfWidth / Math.abs(dx || 1);
-      const tY = halfHeight / Math.abs(dy || 1);
-      const t = Math.min(tX, tY);
-      const intersectionX = dx * t;
-      const intersectionY = dy * t;
-      const magnitude = Math.sqrt(intersectionX * intersectionX + intersectionY * intersectionY);
-      const scale = magnitude > 0 ? (halfWidth * halfHeight) / magnitude : 1;
-      end = {
-        x: target.position.x - (intersectionX / magnitude) * scale * (dx > 0 ? 1 : -1),
-        y: target.position.y - (intersectionY / magnitude) * scale * (dy > 0 ? 1 : -1),
-      };
-    }
+    } // Pas d'ajustement pour les transitions, on garde le centre
 
     const obstacles = [...places, ...transitions].filter(
       (element) => element.id !== source.id && element.id !== target.id

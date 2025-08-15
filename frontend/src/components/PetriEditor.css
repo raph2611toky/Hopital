@@ -27,6 +27,83 @@
 .header-controls {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+}
+
+/* Added layer selector styles */
+.layer-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.layer-selector label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.layer-select {
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: white;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+/* Added validation and export button styles */
+.validate-button,
+.export-button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: white;
+  color: #374151;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.validate-button:hover,
+.export-button:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.validate-button {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.validate-button:hover {
+  background: #2563eb;
+}
+
+/* Added validation status styles */
+.validation-status {
+  display: flex;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: #fef3c7;
+  border-bottom: 1px solid #f59e0b;
+}
+
+.validation-error {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.validation-warning {
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+.validation-info {
+  color: #2563eb;
+  font-weight: 500;
 }
 
 .editor-content {
@@ -147,6 +224,16 @@
   }
 
   .instructions {
+    display: none;
+  }
+
+  /* Hide some controls on mobile */
+  .header-controls {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .layer-selector label {
     display: none;
   }
 }

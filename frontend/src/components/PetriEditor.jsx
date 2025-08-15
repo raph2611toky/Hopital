@@ -21,6 +21,9 @@ const PetriEditor = () => {
   const [simulationInterval, setSimulationInterval] = useState(null)
   const [contextMenu, setContextMenu] = useState({ x: 0, y: 0, visible: false, type: null })
 
+  const [currentLayer, setCurrentLayer] = useState("All")
+  const [validation, setValidation] = useState({ deadlock: false, concurrent: 0, bounded: true })
+
   // États pour le zoom et le pan
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 })
   const [isDragging, setIsDragging] = useState(false)
@@ -35,6 +38,73 @@ const PetriEditor = () => {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [leftClickTimer, setLeftClickTimer] = useState(null)
   const [leftClickStart, setLeftClickStart] = useState(null)
+
+  const checkValidation = useCallback(() => {
+    const validationResult = netRef.current.getValidation()
+    setValidation(validationResult)
+  }, [])
+
+  const exportJSON = useCallback(() => {
+    const json = netRef.current.toJSON()
+    const blob = new Blob([json], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "petri-net.json"
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  const exportPNG = useCallback(async () => {
+    if (typeof window !== "undefined" && canvasRef.current) {
+      try {
+        const html2canvas = (await import("html2canvas")).default
+        const canvas = await html2canvas(canvasRef.current)
+        const url = canvas.toDataURL("image/png")
+        const a = document.createElement("a")
+        a.href = url
+        a.download = "petri-net.png"
+        a.click()
+      } catch (error) {
+        console.error("Export PNG failed:", error)
+        alert("Export PNG nécessite l'installation de html2canvas")
+      }
+    }
+  }, [])
+
+  const duplicateElement = useCallback(
+    (id, type) => {
+      const element = type === "place" ? places.find((p) => p.id === id) : transitions.find((t) => t.id === id)
+      if (element) {
+        const newId = `${type[0]}${Date.now()}`
+        const newElement = {
+          ...element,
+          id: newId,
+          position: { x: element.position.x + 50, y: element.position.y + 50 },
+          label: `${element.label} (copie)`,
+        }
+        if (type === "place") {
+          setPlaces((prev) => [...prev, newElement])
+          netRef.current.addPlace(newElement)
+        } else {
+          setTransitions((prev) => [...prev, newElement])
+          netRef.current.addTransition(newElement)
+        }
+      }
+    },
+    [places, transitions],
+  )
+
+  const filteredPlaces = places.filter((p) => p.layer === currentLayer || currentLayer === "All")
+  const filteredTransitions = transitions.filter((t) => t.layer === currentLayer || currentLayer === "All")
+  const filteredArcs = arcs.filter((arc) => {
+    const source = places.find((p) => p.id === arc.source) || transitions.find((t) => t.id === arc.source)
+    const target = places.find((p) => p.id === arc.target) || transitions.find((t) => t.id === arc.target)
+    return (
+      (source?.layer === currentLayer || currentLayer === "All") &&
+      (target?.layer === currentLayer || currentLayer === "All")
+    )
+  })
 
   // Gestion du clic droit sur le canvas
   const handleCanvasContextMenu = useCallback(
@@ -198,22 +268,20 @@ const PetriEditor = () => {
   const handleElementLeftClick = useCallback(
     (element) => {
       if (isConnecting && connectingFrom && connectingFrom.id !== element.id) {
-        finishArcCreation(element);
+        finishArcCreation(element)
       } else if (!isConnecting) {
-        startArcCreation(element);
+        startArcCreation(element)
       }
     },
-    [isConnecting, connectingFrom, startArcCreation, finishArcCreation]
-  );
+    [isConnecting, connectingFrom, startArcCreation, finishArcCreation],
+  )
 
   const startElementLeftClick = useCallback(
     (element, event) => {
       const startTime = Date.now()
       setLeftClickStart(startTime)
 
-      // Set a timer to distinguish between click and drag
       const timer = setTimeout(() => {
-        // If we reach here, it's a drag operation
         const rect = canvasRef.current.getBoundingClientRect()
         const x = (event.clientX - rect.left - transform.x) / transform.scale
         const y = (event.clientY - rect.top - transform.y) / transform.scale
@@ -223,7 +291,7 @@ const PetriEditor = () => {
           x: x - element.position.x,
           y: y - element.position.y,
         })
-      }, 150) // 150ms threshold for drag vs click
+      }, 150)
 
       setLeftClickTimer(timer)
     },
@@ -267,17 +335,19 @@ const PetriEditor = () => {
               tokens: netRef.current.marking[p.id] || p.tokens,
             })),
           )
+          checkValidation()
         })
       }, 1000)
       setSimulationInterval(interval)
     }
-  }, [simulationInterval])
+  }, [simulationInterval, checkValidation])
 
   const pauseSimulation = useCallback(() => {
     if (simulationInterval) {
       clearInterval(simulationInterval)
       setSimulationInterval(null)
     }
+    netRef.current.clearPendingTransitions()
   }, [simulationInterval])
 
   const stepSimulation = useCallback(() => {
@@ -288,8 +358,9 @@ const PetriEditor = () => {
           tokens: netRef.current.marking[p.id] || p.tokens,
         })),
       )
+      checkValidation()
     })
-  }, [])
+  }, [checkValidation])
 
   const addPlace = useCallback(
     (position) => {
@@ -298,14 +369,14 @@ const PetriEditor = () => {
         position,
         tokens: 0,
         label: `Place ${places.length + 1}`,
-        capacity: 10,
-        type: "resource",
+        capacity: undefined, // Added capacity field
         tokenColor: "#000000",
+        layer: currentLayer === "All" ? "Consultation" : currentLayer, // Added layer field
       }
       setPlaces((prev) => [...prev, newPlace])
       netRef.current.addPlace(newPlace)
     },
-    [places.length],
+    [places.length, currentLayer],
   )
 
   const addTransition = useCallback(
@@ -315,14 +386,15 @@ const PetriEditor = () => {
         position,
         label: `Transition ${transitions.length + 1}`,
         type: "immediate",
-        delay: 0,
+        delayMean: 1, // Added delayMean field
         priority: 1,
         orientation: "portrait",
+        layer: currentLayer === "All" ? "Consultation" : currentLayer, // Added layer field
       }
       setTransitions((prev) => [...prev, newTransition])
       netRef.current.addTransition(newTransition)
     },
-    [transitions.length],
+    [transitions.length, currentLayer],
   )
 
   const deleteElement = useCallback((id, type) => {
@@ -343,11 +415,25 @@ const PetriEditor = () => {
     netRef.current.modifyTokens(id, amount)
   }, [])
 
-  const updateElement = useCallback((id, updates) => {
-    setPlaces((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)))
-    setTransitions((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
-    setArcs((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)))
-  }, [])
+  const updateElement = useCallback(
+    (id, updates) => {
+      setPlaces((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)))
+      setTransitions((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+      setArcs((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)))
+
+      const place = places.find((p) => p.id === id)
+      const transition = transitions.find((t) => t.id === id)
+      if (place) {
+        netRef.current.places[id] = { ...netRef.current.places[id], ...updates }
+        if (updates.tokens !== undefined) {
+          netRef.current.marking[id] = updates.tokens
+        }
+      } else if (transition) {
+        netRef.current.transitions[id] = { ...netRef.current.transitions[id], ...updates }
+      }
+    },
+    [places, transitions],
+  )
 
   // Event listeners
   useEffect(() => {
@@ -372,8 +458,34 @@ const PetriEditor = () => {
   return (
     <div className="petri-editor">
       <div className="editor-header">
-        <h1>Éditeur de Réseaux de Petri</h1>
+        <h1>Éditeur de Réseaux de Petri - Modèle Hôpital</h1>
         <div className="header-controls">
+          <div className="layer-selector">
+            <label htmlFor="layer-select">Couche:</label>
+            <select
+              id="layer-select"
+              value={currentLayer}
+              onChange={(e) => setCurrentLayer(e.target.value)}
+              className="layer-select"
+            >
+              <option value="All">Toutes</option>
+              <option value="Consultation">Consultation</option>
+              <option value="Maternité">Maternité</option>
+              <option value="Chirurgie">Chirurgie</option>
+              <option value="Gardes">Gardes</option>
+            </select>
+          </div>
+
+          <button onClick={checkValidation} className="validate-button">
+            Valider
+          </button>
+          <button onClick={exportJSON} className="export-button">
+            Export JSON
+          </button>
+          <button onClick={exportPNG} className="export-button">
+            Export PNG
+          </button>
+
           <SimulationControls
             onPlay={playSimulation}
             onPause={pauseSimulation}
@@ -382,6 +494,16 @@ const PetriEditor = () => {
           />
         </div>
       </div>
+
+      {(validation.deadlock || validation.concurrent > 0 || !validation.bounded) && (
+        <div className="validation-status">
+          {validation.deadlock && <div className="validation-error">⚠️ Deadlock détecté</div>}
+          {validation.concurrent > 0 && (
+            <div className="validation-info">🔄 Concurrence: {validation.concurrent} transitions</div>
+          )}
+          {!validation.bounded && <div className="validation-warning">📊 Réseau non borné</div>}
+        </div>
+      )}
 
       <div className="editor-content">
         <div ref={canvasRef} className="canvas-container" onClick={closeContextMenu}>
@@ -395,7 +517,7 @@ const PetriEditor = () => {
             {/* Grille de fond */}
             <div className="grid-background" />
 
-            {arcs.map((arc) => {
+            {filteredArcs.map((arc) => {
               const sourceElement =
                 places.find((p) => p.id === arc.source) || transitions.find((t) => t.id === arc.source)
               const targetElement =
@@ -447,8 +569,7 @@ const PetriEditor = () => {
               </svg>
             )}
 
-            {/* Places */}
-            {places.map((place) => (
+            {filteredPlaces.map((place) => (
               <Place
                 key={place.id}
                 place={place}
@@ -462,7 +583,7 @@ const PetriEditor = () => {
               />
             ))}
 
-            {transitions.map((transition) => (
+            {filteredTransitions.map((transition) => (
               <Transition
                 key={transition.id}
                 transition={transition}
@@ -486,6 +607,7 @@ const PetriEditor = () => {
               deleteElement(id, type)
               setSelected(null)
             }}
+            onDuplicate={duplicateElement}
           />
         </div>
       </div>
@@ -503,6 +625,13 @@ const PetriEditor = () => {
           const element = contextMenu.element
           if (element && contextMenu.type === "arc") {
             deleteElement(element.id, "arc")
+          }
+        }}
+        onDuplicate={() => {
+          const element = contextMenu.element
+          if (element) {
+            const type = element.tokens !== undefined ? "place" : "transition"
+            duplicateElement(element.id, type)
           }
         }}
       />

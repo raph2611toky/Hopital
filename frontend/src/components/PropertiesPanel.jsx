@@ -87,6 +87,21 @@ const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
             </div>
 
             <div className="property-group">
+              <label htmlFor="capacity">Capacité Max</label>
+              <input
+                id="capacity"
+                type="number"
+                min="0"
+                value={getValue("capacity") || ""}
+                onChange={(e) =>
+                  handleInputChange("capacity", e.target.value ? Number.parseInt(e.target.value) : undefined)
+                }
+                className="property-input"
+                placeholder="Illimitée"
+              />
+            </div>
+
+            <div className="property-group">
               <label htmlFor="tokenColor">Couleur des jetons</label>
               <input
                 id="tokenColor"
@@ -95,6 +110,22 @@ const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
                 onChange={(e) => handleInputChange("tokenColor", e.target.value)}
                 className="property-input"
               />
+            </div>
+
+            <div className="property-group">
+              <label htmlFor="layer">Couche</label>
+              <select
+                id="layer"
+                value={getValue("layer") || "All"}
+                onChange={(e) => handleInputChange("layer", e.target.value)}
+                className="property-select"
+              >
+                <option value="All">Toutes</option>
+                <option value="Consultation">Consultation</option>
+                <option value="Maternité">Maternité</option>
+                <option value="Chirurgie">Chirurgie</option>
+                <option value="Gardes">Gardes</option>
+              </select>
             </div>
           </>
         )}
@@ -125,6 +156,20 @@ const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
               </select>
             </div>
 
+            {getValue("type") === "timed" && (
+              <div className="property-group">
+                <label htmlFor="delayMean">Durée Moyenne (min)</label>
+                <input
+                  id="delayMean"
+                  type="number"
+                  min="1"
+                  value={getValue("delayMean") || 1}
+                  onChange={(e) => handleInputChange("delayMean", Number.parseInt(e.target.value) || 1)}
+                  className="property-input"
+                />
+              </div>
+            )}
+
             <div className="property-group">
               <label htmlFor="orientation">Orientation</label>
               <select
@@ -144,10 +189,26 @@ const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
                 id="priority"
                 type="number"
                 min="1"
-                value={getValue("priority")}
+                value={getValue("priority") || 1}
                 onChange={(e) => handleInputChange("priority", Number.parseInt(e.target.value) || 1)}
                 className="property-input"
               />
+            </div>
+
+            <div className="property-group">
+              <label htmlFor="layer">Couche</label>
+              <select
+                id="layer"
+                value={getValue("layer") || "All"}
+                onChange={(e) => handleInputChange("layer", e.target.value)}
+                className="property-select"
+              >
+                <option value="All">Toutes</option>
+                <option value="Consultation">Consultation</option>
+                <option value="Maternité">Maternité</option>
+                <option value="Chirurgie">Chirurgie</option>
+                <option value="Gardes">Gardes</option>
+              </select>
             </div>
           </>
         )}
@@ -186,6 +247,33 @@ const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
                 />
                 Arc de remise à zéro
               </label>
+            </div>
+
+            {getValue("isReset") && (
+              <div className="property-group">
+                <label htmlFor="resetValue">Valeur de remise à zéro</label>
+                <input
+                  id="resetValue"
+                  type="number"
+                  min="0"
+                  value={getValue("resetValue") || 0}
+                  onChange={(e) => handleInputChange("resetValue", Number.parseInt(e.target.value) || 0)}
+                  className="property-input"
+                />
+              </div>
+            )}
+
+            <div className="property-group">
+              <label htmlFor="probability">Probabilité (%)</label>
+              <input
+                id="probability"
+                type="number"
+                min="0"
+                max="100"
+                value={getValue("probability") || 100}
+                onChange={(e) => handleInputChange("probability", Number.parseInt(e.target.value) || 100)}
+                className="property-input"
+              />
             </div>
           </>
         )}
