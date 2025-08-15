@@ -1,9 +1,10 @@
 .petri-editor {
-  height: 100vh;
+  height: 200vh;
   display: flex;
   flex-direction: column;
   background: #f8fafc;
   font-family: system-ui, -apple-system, sans-serif;
+  overflow-y: auto;
 }
 
 .editor-header {
@@ -110,6 +111,7 @@
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0; /* Ensures proper flex shrinking */
 }
 
 /* Custom canvas container styles replacing ReactFlow */

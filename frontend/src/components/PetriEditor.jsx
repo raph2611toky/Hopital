@@ -7,12 +7,14 @@ import Arc from "./Arc"
 import PropertiesPanel from "./PropertiesPanel"
 import SimulationControls from "./SimulationControls"
 import ContextMenu from "./ContextMenu"
-import { PetriNet } from "../models/PetriNet"
+import ThemeSelector from "./ThemeSelector"
+import NetworkManager from "./NetworkManager"
+import LayerManager from "./LayerManager"
+import api from "../Api"
 import "./PetriEditor.css"
 
 const PetriEditor = () => {
   const canvasRef = useRef(null)
-  const netRef = useRef(new PetriNet())
 
   const [places, setPlaces] = useState([])
   const [transitions, setTransitions] = useState([])
@@ -21,10 +23,14 @@ const PetriEditor = () => {
   const [simulationInterval, setSimulationInterval] = useState(null)
   const [contextMenu, setContextMenu] = useState({ x: 0, y: 0, visible: false, type: null })
 
+  const [selectedTheme, setSelectedTheme] = useState(null)
+  const [themeData, setThemeData] = useState(null)
+  const [layers, setLayers] = useState([])
   const [currentLayer, setCurrentLayer] = useState("All")
+  const [petriNets, setPetriNets] = useState([])
+  const [currentPetriNet, setCurrentPetriNet] = useState(null)
   const [validation, setValidation] = useState({ deadlock: false, concurrent: 0, bounded: true })
 
-  // États pour le zoom et le pan
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
@@ -36,24 +42,98 @@ const PetriEditor = () => {
 
   const [draggedElement, setDraggedElement] = useState(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
-  const [leftClickTimer, setLeftClickTimer] = useState(null)
-  const [leftClickStart, setLeftClickStart] = useState(null)
 
-  const checkValidation = useCallback(() => {
-    const validationResult = netRef.current.getValidation()
-    setValidation(validationResult)
+  const handleThemeLoad = useCallback((loadedThemeData) => {
+    console.log("[v0] Loading theme data:", loadedThemeData)
+    setThemeData(loadedThemeData)
+    setLayers(loadedThemeData.layers || [])
+    setPetriNets(loadedThemeData.petriNets || [])
+
+    setPlaces(loadedThemeData.places || [])
+    setTransitions(loadedThemeData.transitions || [])
+    setArcs(loadedThemeData.arcs || [])
+
+    if (loadedThemeData.petriNets && loadedThemeData.petriNets.length > 0) {
+      setCurrentPetriNet(loadedThemeData.petriNets[0].id)
+    }
+
+    setCurrentLayer("All")
+    setSelected(null)
+
+    checkValidation()
   }, [])
 
-  const exportJSON = useCallback(() => {
-    const json = netRef.current.toJSON()
-    const blob = new Blob([json], { type: "application/json" })
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("selectedTheme")
+    const savedPetriNet = localStorage.getItem("currentPetriNet")
+    const savedLayer = localStorage.getItem("currentLayer")
+
+    if (savedTheme) {
+      const theme = JSON.parse(savedTheme)
+      setSelectedTheme(theme)
+      api.get(`/themes/${theme.id}/`)
+        .then((response) => {
+          setThemeData(response.data)
+          setLayers(response.data.layers || [])
+          setPetriNets(response.data.petri_nets || [])
+          setPlaces(response.data.places || [])
+          setTransitions(response.data.transitions || [])
+          setArcs(response.data.arcs || [])
+        })
+        .catch((err) => {
+          console.error("[PetriEditor] Failed to load saved theme:", err)
+          setThemeData({ theme, layers: [], petri_nets: [], places: [], transitions: [], arcs: [] })
+        })
+    }
+
+    if (savedPetriNet) {
+      setCurrentPetriNet(Number(savedPetriNet))
+    }
+
+    if (savedLayer) {
+      setCurrentLayer(savedLayer === "All" ? "All" : Number(savedLayer))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedTheme) {
+      localStorage.setItem("selectedTheme", JSON.stringify(selectedTheme))
+    } else {
+      localStorage.removeItem("selectedTheme")
+    }
+  }, [selectedTheme])
+  
+  useEffect(() => {
+    if (currentPetriNet) {
+      localStorage.setItem("currentPetriNet", currentPetriNet)
+    } else {
+      localStorage.removeItem("currentPetriNet")
+    }
+  }, [currentPetriNet])
+
+  useEffect(() => {
+    localStorage.setItem("currentLayer", currentLayer)
+  }, [currentLayer])
+
+  const checkValidation = useCallback(() => {
+    setValidation({ deadlock: false, concurrent: 0, bounded: true })
+  }, [])
+
+  const exportJSON = useCallback(async () => {
+    const data = {
+      petri_net: currentPetriNet,
+      places,
+      transitions,
+      arcs,
+    }
+    const blob = new Blob([JSON.stringify(data)], { type: "application/json" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
     a.download = "petri-net.json"
     a.click()
     URL.revokeObjectURL(url)
-  }, [])
+  }, [places, transitions, arcs, currentPetriNet])
 
   const exportPNG = useCallback(async () => {
     if (typeof window !== "undefined" && canvasRef.current) {
@@ -73,40 +153,54 @@ const PetriEditor = () => {
   }, [])
 
   const duplicateElement = useCallback(
-    (id, type) => {
+    async (id, type) => {
       const element = type === "place" ? places.find((p) => p.id === id) : transitions.find((t) => t.id === id)
       if (element) {
         const newId = `${type[0]}${Date.now()}`
         const newElement = {
           ...element,
-          id: newId,
+          id_in_net: newId,
           position: { x: element.position.x + 50, y: element.position.y + 50 },
           label: `${element.label} (copie)`,
+          petri_net: currentPetriNet,
         }
-        if (type === "place") {
-          setPlaces((prev) => [...prev, newElement])
-          netRef.current.addPlace(newElement)
-        } else {
-          setTransitions((prev) => [...prev, newElement])
-          netRef.current.addTransition(newElement)
+        try {
+          const response = await fetch(`${import.meta.env.VITE_APP_API_URL}/${type}s/create/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newElement),
+          })
+          const createdElement = await response.data
+          if (type === "place") {
+            setPlaces((prev) => [...prev, createdElement])
+          } else {
+            setTransitions((prev) => [...prev, createdElement])
+          }
+        } catch (err) {
+          console.error(`Erreur lors de la duplication de ${type}:`, err)
         }
       }
     },
-    [places, transitions],
+    [places, transitions, currentPetriNet],
   )
 
-  const filteredPlaces = places.filter((p) => p.layer === currentLayer || currentLayer === "All")
-  const filteredTransitions = transitions.filter((t) => t.layer === currentLayer || currentLayer === "All")
+  const filteredPlaces = places.filter(
+    (p) => p.petri_net === currentPetriNet && (currentLayer === "All" || p.layer === currentLayer),
+  )
+  const filteredTransitions = transitions.filter(
+    (t) => t.petri_net === currentPetriNet && (currentLayer === "All" || t.layer === currentLayer),
+  )
   const filteredArcs = arcs.filter((arc) => {
-    const source = places.find((p) => p.id === arc.source) || transitions.find((t) => t.id === arc.source)
-    const target = places.find((p) => p.id === arc.target) || transitions.find((t) => t.id === arc.target)
+    const source =
+      places.find((p) => p.id_in_net === arc.source_id) || transitions.find((t) => t.id_in_net === arc.source_id)
+    const target =
+      places.find((p) => p.id_in_net === arc.target_id) || transitions.find((t) => t.id_in_net === arc.target_id)
     return (
-      (source?.layer === currentLayer || currentLayer === "All") &&
-      (target?.layer === currentLayer || currentLayer === "All")
+      arc.petri_net === currentPetriNet &&
+      (currentLayer === "All" || (source?.layer === currentLayer && target?.layer === currentLayer))
     )
   })
 
-  // Gestion du clic droit sur le canvas
   const handleCanvasContextMenu = useCallback(
     (event) => {
       event.preventDefault()
@@ -127,7 +221,6 @@ const PetriEditor = () => {
     [transform],
   )
 
-  // Gestion du zoom avec la molette
   const handleWheel = useCallback(
     (event) => {
       event.preventDefault()
@@ -179,16 +272,27 @@ const PetriEditor = () => {
           y: y - dragOffset.y,
         }
 
-        if (draggedElement.tokens !== undefined) {
-          // C'est une place
-          setPlaces((prev) => prev.map((p) => (p.id === draggedElement.id ? { ...p, position: newPosition } : p)))
-        } else {
-          // C'est une transition
-          setTransitions((prev) => prev.map((t) => (t.id === draggedElement.id ? { ...t, position: newPosition } : t)))
+        const updateElement = async () => {
+          try {
+            const type = draggedElement.tokens !== undefined ? "place" : "transition"
+            const response = await fetch(`http://127.0.0.1:8000/api/rdp/${type}s/${draggedElement.id}/update/`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ position: newPosition }),
+            })
+            const updatedElement = await response.json()
+            if (type === "place") {
+              setPlaces((prev) => prev.map((p) => (p.id === draggedElement.id ? updatedElement : p)))
+            } else {
+              setTransitions((prev) => prev.map((t) => (t.id === draggedElement.id ? updatedElement : t)))
+            }
+          } catch (err) {
+            console.error("Erreur lors de la mise à jour de la position:", err)
+          }
         }
+        updateElement()
       }
 
-      // Mise à jour de l'arc temporaire pendant la connexion
       if (isConnecting && connectingFrom) {
         setTempArc({
           from: connectingFrom.position,
@@ -202,18 +306,12 @@ const PetriEditor = () => {
   const handleMouseUp = useCallback(() => {
     setIsDragging(false)
     setDraggedElement(null)
-    if (leftClickTimer) {
-      clearTimeout(leftClickTimer)
-      setLeftClickTimer(null)
-    }
-    setLeftClickStart(null)
-
     if (isConnecting && !event.target.closest(".petri-element")) {
       setIsConnecting(false)
       setConnectingFrom(null)
       setTempArc(null)
     }
-  }, [isConnecting, leftClickTimer])
+  }, [isConnecting])
 
   const startArcCreation = useCallback((element) => {
     setIsConnecting(true)
@@ -221,40 +319,41 @@ const PetriEditor = () => {
   }, [])
 
   const finishArcCreation = useCallback(
-    (targetElement) => {
+    async (targetElement) => {
       if (connectingFrom && targetElement && connectingFrom.id !== targetElement.id) {
         const sourceType = connectingFrom.tokens !== undefined ? "place" : "transition"
         const targetType = targetElement.tokens !== undefined ? "place" : "transition"
 
-        console.log("[v0] Arc creation attempt:", { sourceType, targetType, connectingFrom, targetElement })
-
-        // Empêcher les connexions place-place et transition-transition
         if (sourceType !== targetType) {
-          // Vérifier qu'un arc n'existe pas déjà entre ces éléments
           const existingArc = arcs.find(
             (arc) =>
-              (arc.source === connectingFrom.id && arc.target === targetElement.id) ||
-              (arc.source === targetElement.id && arc.target === connectingFrom.id),
+              (arc.source_id === connectingFrom.id_in_net && arc.target_id === targetElement.id_in_net) ||
+              (arc.source_id === targetElement.id_in_net && arc.target_id === connectingFrom.id_in_net),
           )
 
           if (!existingArc) {
             const newArc = {
-              id: `a${Date.now()}`,
-              source: connectingFrom.id,
-              target: targetElement.id,
+              petri_net: currentPetriNet,
+              id_in_net: `a${Date.now()}`,
+              source_id: connectingFrom.id_in_net,
+              target_id: targetElement.id_in_net,
               weight: 1,
-              isInhibitor: false,
-              isReset: false,
+              is_inhibitor: false,
+              is_reset: false,
             }
 
-            console.log("[v0] Creating new arc:", newArc)
-            setArcs((prev) => [...prev, newArc])
-            netRef.current.addArc(newArc)
-          } else {
-            console.log("[v0] Arc already exists between these elements")
+            try {
+              const response = await fetch(`${import.meta.env.VITE_APP_API_URL}/arcs/create/`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newArc),
+              })
+              const createdArc = await response.json()
+              setArcs((prev) => [...prev, createdArc])
+            } catch (err) {
+              console.error("Erreur lors de la création de l'arc:", err)
+            }
           }
-        } else {
-          console.log("[v0] Cannot create arc between same element types:", sourceType)
         }
       }
 
@@ -262,7 +361,7 @@ const PetriEditor = () => {
       setConnectingFrom(null)
       setTempArc(null)
     },
-    [connectingFrom, arcs],
+    [connectingFrom, arcs, currentPetriNet],
   )
 
   const handleElementLeftClick = useCallback(
@@ -278,49 +377,36 @@ const PetriEditor = () => {
 
   const startElementLeftClick = useCallback(
     (element, event) => {
-      const startTime = Date.now()
-      setLeftClickStart(startTime)
+      event.stopPropagation()
+      const rect = canvasRef.current.getBoundingClientRect()
+      const x = (event.clientX - rect.left - transform.x) / transform.scale
+      const y = (event.clientY - rect.top - transform.y) / transform.scale
 
-      const timer = setTimeout(() => {
-        const rect = canvasRef.current.getBoundingClientRect()
-        const x = (event.clientX - rect.left - transform.x) / transform.scale
-        const y = (event.clientY - rect.top - transform.y) / transform.scale
-
-        setDraggedElement(element)
-        setDragOffset({
-          x: x - element.position.x,
-          y: y - element.position.y,
-        })
-      }, 150)
-
-      setLeftClickTimer(timer)
+      setDraggedElement(element)
+      setDragOffset({
+        x: x - element.position.x,
+        y: y - element.position.y,
+      })
     },
     [transform],
   )
 
-  const handleElementLeftUp = useCallback(
-    (element) => {
-      if (leftClickTimer) {
-        clearTimeout(leftClickTimer)
-        setLeftClickTimer(null)
-      }
-
-      // If it was a quick click (not a drag), handle arc creation
-      if (leftClickStart && Date.now() - leftClickStart < 150) {
-        handleElementLeftClick(element)
-      }
-
-      setLeftClickStart(null)
-    },
-    [leftClickTimer, leftClickStart, handleElementLeftClick],
-  )
+  const handleElementLeftUp = useCallback((element) => {
+    setDraggedElement(null)
+  }, [])
 
   const handleElementRightClick = useCallback((element, event) => {
     event.preventDefault()
     setSelected(element)
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      visible: true,
+      type: element.tokens !== undefined ? "place" : "transition",
+      element,
+    })
   }, [])
 
-  // Fermer le menu contextuel
   const closeContextMenu = useCallback(() => {
     setContextMenu((prev) => ({ ...prev, visible: false }))
   }, [])
@@ -328,15 +414,13 @@ const PetriEditor = () => {
   const playSimulation = useCallback(() => {
     if (!simulationInterval) {
       const interval = setInterval(() => {
-        netRef.current.simulateStep(() => {
-          setPlaces((prev) =>
-            prev.map((p) => ({
-              ...p,
-              tokens: netRef.current.marking[p.id] || p.tokens,
-            })),
-          )
-          checkValidation()
-        })
+        setPlaces((prev) =>
+          prev.map((p) => ({
+            ...p,
+            tokens: Math.max(0, p.tokens + (Math.random() > 0.5 ? 1 : -1)),
+          })),
+        )
+        checkValidation()
       }, 1000)
       setSimulationInterval(interval)
     }
@@ -347,95 +431,207 @@ const PetriEditor = () => {
       clearInterval(simulationInterval)
       setSimulationInterval(null)
     }
-    netRef.current.clearPendingTransitions()
   }, [simulationInterval])
 
   const stepSimulation = useCallback(() => {
-    netRef.current.simulateStep(() => {
-      setPlaces((prev) =>
-        prev.map((p) => ({
-          ...p,
-          tokens: netRef.current.marking[p.id] || p.tokens,
-        })),
-      )
-      checkValidation()
-    })
+    setPlaces((prev) =>
+      prev.map((p) => ({
+        ...p,
+        tokens: Math.max(0, p.tokens + (Math.random() > 0.5 ? 1 : -1)),
+      })),
+    )
+    checkValidation()
   }, [checkValidation])
 
   const addPlace = useCallback(
-    (position) => {
+    async (position) => {
       const newPlace = {
-        id: `p${Date.now()}`,
+        petri_net: currentPetriNet,
+        id_in_net: `p${Date.now()}`,
+        label: `Place ${places.length + 1}`,
         position,
         tokens: 0,
-        label: `Place ${places.length + 1}`,
-        capacity: undefined, // Added capacity field
-        tokenColor: "#000000",
-        layer: currentLayer === "All" ? "Consultation" : currentLayer, // Added layer field
+        capacity: null,
+        token_color: "#000000"
       }
-      setPlaces((prev) => [...prev, newPlace])
-      netRef.current.addPlace(newPlace)
+      try {
+        const response = await fetch(`${import.meta.env.VITE_APP_API_URL}/places/create/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newPlace),
+        })
+        const createdPlace = await response.json()
+        setPlaces((prev) => [...prev, createdPlace])
+        checkValidation()
+      } catch (err) {
+        console.error("Erreur lors de l'ajout de la place:", err)
+      }
     },
-    [places.length, currentLayer],
+    [places.length, currentPetriNet, currentLayer, checkValidation],
   )
 
   const addTransition = useCallback(
-    (position) => {
+    async (position) => {
       const newTransition = {
-        id: `t${Date.now()}`,
-        position,
+        petri_net: currentPetriNet,
+        id_in_net: `t${Date.now()}`,
         label: `Transition ${transitions.length + 1}`,
+        position,
         type: "immediate",
-        delayMean: 1, // Added delayMean field
+        delay_mean: 1.0,
         priority: 1,
         orientation: "portrait",
-        layer: currentLayer === "All" ? "Consultation" : currentLayer, // Added layer field
+        layer: currentLayer,
       }
-      setTransitions((prev) => [...prev, newTransition])
-      netRef.current.addTransition(newTransition)
+      try {
+        const response = await fetch(`${import.meta.env.VITE_APP_API_URL}/transitions/create/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newTransition),
+        })
+        const createdTransition = await response.json()
+        setTransitions((prev) => [...prev, createdTransition])
+        checkValidation()
+      } catch (err) {
+        console.error("Erreur lors de l'ajout de la transition:", err)
+      }
     },
-    [transitions.length, currentLayer],
+    [transitions.length, currentPetriNet, currentLayer, checkValidation],
   )
 
-  const deleteElement = useCallback((id, type) => {
-    if (type === "place") {
-      setPlaces((prev) => prev.filter((p) => p.id !== id))
-      netRef.current.removePlace(id)
-    } else if (type === "transition") {
-      setTransitions((prev) => prev.filter((t) => t.id !== id))
-      netRef.current.removeTransition(id)
-    } else if (type === "arc") {
-      setArcs((prev) => prev.filter((a) => a.id !== id))
-      netRef.current.removeArc(id)
+  const deleteElement = useCallback(
+    async (id, type) => {
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/api/rdp/${type}s/${id}/delete/`, {
+          method: "DELETE",
+        })
+        if (response.ok) {
+          if (type === "place") {
+            setPlaces((prev) => prev.filter((p) => p.id !== id))
+            setArcs((prev) => prev.filter((a) => a.source_id !== id && a.target_id !== id))
+          } else if (type === "transition") {
+            setTransitions((prev) => prev.filter((t) => t.id !== id))
+            setArcs((prev) => prev.filter((a) => a.source_id !== id && a.target_id !== id))
+          } else if (type === "arc") {
+            setArcs((prev) => prev.filter((a) => a.id !== id))
+          }
+          checkValidation()
+        }
+      } catch (err) {
+        console.error(`Erreur lors de la suppression de ${type}:`, err)
+      }
+    },
+    [checkValidation],
+  )
+
+  const modifyTokens = useCallback(
+    async (id, amount) => {
+      try {
+        const place = places.find((p) => p.id === id)
+        const newTokens = Math.max(0, place.tokens + amount)
+        const response = await fetch(`http://127.0.0.1:8000/api/rdp/places/${id}/update/`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tokens: newTokens }),
+        })
+        const updatedPlace = await response.json()
+        setPlaces((prev) => prev.map((p) => (p.id === id ? updatedPlace : p)))
+      } catch (err) {
+        console.error("Erreur lors de la modification des jetons:", err)
+      }
+    },
+    [places],
+  )
+
+  const updateElement = useCallback(
+    async (id, updates) => {
+      try {
+        const type = places.find((p) => p.id === id)
+          ? "place"
+          : transitions.find((t) => t.id === id)
+            ? "transition"
+            : "arc"
+        const response = await fetch(`http://127.0.0.1:8000/api/rdp/${type}s/${id}/update/`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        })
+        const updatedElement = await response.json()
+        if (type === "place") {
+          setPlaces((prev) => prev.map((p) => (p.id === id ? updatedElement : p)))
+        } else if (type === "transition") {
+          setTransitions((prev) => prev.map((t) => (t.id === id ? updatedElement : t)))
+        } else {
+          setArcs((prev) => prev.map((a) => (a.id === id ? updatedElement : a)))
+        }
+        checkValidation()
+      } catch (err) {
+        console.error(`Erreur lors de la mise à jour de l'élément:`, err)
+      }
+    },
+    [places, transitions, arcs, checkValidation],
+  )
+
+  const createNetwork = useCallback(async (networkData) => {
+    try {
+      const response = await api.post("/petri-nets/create/", networkData)
+      const createdNetwork = await response.data
+      setPetriNets((prev) => [...prev, createdNetwork])
+      setCurrentPetriNet(createdNetwork.id)
+    } catch (err) {
+      console.error("Erreur lors de la création du réseau:", err)
     }
   }, [])
 
-  const modifyTokens = useCallback((id, amount) => {
-    setPlaces((prev) => prev.map((p) => (p.id === id ? { ...p, tokens: Math.max(0, p.tokens + amount) } : p)))
-    netRef.current.modifyTokens(id, amount)
-  }, [])
-
-  const updateElement = useCallback(
-    (id, updates) => {
-      setPlaces((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)))
-      setTransitions((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
-      setArcs((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)))
-
-      const place = places.find((p) => p.id === id)
-      const transition = transitions.find((t) => t.id === id)
-      if (place) {
-        netRef.current.places[id] = { ...netRef.current.places[id], ...updates }
-        if (updates.tokens !== undefined) {
-          netRef.current.marking[id] = updates.tokens
+  const deleteNetwork = useCallback(
+    async (networkId) => {
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/api/rdp/petri-nets/${networkId}/delete/`, {
+          method: "DELETE",
+        })
+        if (response.ok) {
+          setPetriNets((prev) => prev.filter((n) => n.id !== networkId))
+          if (currentPetriNet === networkId) {
+            const remaining = petriNets.filter((n) => n.id !== networkId)
+            setCurrentPetriNet(remaining.length > 0 ? remaining[0].id : null)
+          }
         }
-      } else if (transition) {
-        netRef.current.transitions[id] = { ...netRef.current.transitions[id], ...updates }
+      } catch (err) {
+        console.error("Erreur lors de la suppression du réseau:", err)
       }
     },
-    [places, transitions],
+    [currentPetriNet, petriNets],
   )
 
-  // Event listeners
+  const createLayer = useCallback(async (layerData) => {
+    try {
+      const response = await api.post("/layers/create/", layerData)
+      const createdLayer = await response.data
+      setLayers((prev) => [...prev, createdLayer])
+    } catch (err) {
+      console.error("Erreur lors de la création de la couche:", err)
+    }
+  }, [])
+
+  const deleteLayer = useCallback(
+    async (layerId) => {
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/api/rdp/layers/${layerId}/delete/`, {
+          method: "DELETE",
+        })
+        if (response.ok) {
+          setLayers((prev) => prev.filter((l) => l.id !== layerId))
+          if (currentLayer === layerId) {
+            setCurrentLayer("All")
+          }
+        }
+      } catch (err) {
+        console.error("Erreur lors de la suppression de la couche:", err)
+      }
+    },
+    [currentLayer],
+  )
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas) {
@@ -457,25 +653,29 @@ const PetriEditor = () => {
 
   return (
     <div className="petri-editor">
-      <div className="editor-header">
-        <h1>Éditeur de Réseaux de Petri - Modèle Hôpital</h1>
-        <div className="header-controls">
-          <div className="layer-selector">
-            <label htmlFor="layer-select">Couche:</label>
-            <select
-              id="layer-select"
-              value={currentLayer}
-              onChange={(e) => setCurrentLayer(e.target.value)}
-              className="layer-select"
-            >
-              <option value="All">Toutes</option>
-              <option value="Consultation">Consultation</option>
-              <option value="Maternité">Maternité</option>
-              <option value="Chirurgie">Chirurgie</option>
-              <option value="Gardes">Gardes</option>
-            </select>
-          </div>
+      <ThemeSelector selectedTheme={selectedTheme} onThemeSelect={setSelectedTheme} onThemeLoad={handleThemeLoad} />
 
+      <NetworkManager
+        petriNets={petriNets}
+        currentPetriNet={currentPetriNet}
+        onNetworkSelect={setCurrentPetriNet}
+        onNetworkCreate={createNetwork}
+        onNetworkDelete={deleteNetwork}
+        selectedTheme={selectedTheme}
+      />
+
+      <LayerManager
+        layers={layers}
+        currentLayer={currentLayer}
+        onLayerSelect={setCurrentLayer}
+        onLayerCreate={createLayer}
+        onLayerDelete={deleteLayer}
+        selectedTheme={selectedTheme}
+      />
+
+      <div className="editor-header">
+        <h1>Éditeur de Réseaux de Petri</h1>
+        <div className="header-controls" style={{ display: "flex", alignItems: "center" }}>
           <button onClick={checkValidation} className="validate-button">
             Valider
           </button>
@@ -485,7 +685,6 @@ const PetriEditor = () => {
           <button onClick={exportPNG} className="export-button">
             Export PNG
           </button>
-
           <SimulationControls
             onPlay={playSimulation}
             onPause={pauseSimulation}
@@ -514,14 +713,14 @@ const PetriEditor = () => {
               transformOrigin: "0 0",
             }}
           >
-            {/* Grille de fond */}
             <div className="grid-background" />
-
             {filteredArcs.map((arc) => {
               const sourceElement =
-                places.find((p) => p.id === arc.source) || transitions.find((t) => t.id === arc.source)
+                places.find((p) => p.id_in_net === arc.source_id) ||
+                transitions.find((t) => t.id_in_net === arc.source_id)
               const targetElement =
-                places.find((p) => p.id === arc.target) || transitions.find((t) => t.id === arc.target)
+                places.find((p) => p.id_in_net === arc.target_id) ||
+                transitions.find((t) => t.id_in_net === arc.target_id)
 
               if (sourceElement && targetElement) {
                 return (
@@ -551,7 +750,6 @@ const PetriEditor = () => {
               return null
             })}
 
-            {/* Arc temporaire pendant la connexion */}
             {tempArc && (
               <svg
                 className="temp-arc"

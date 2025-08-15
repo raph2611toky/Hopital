@@ -30,14 +30,13 @@ class Layer(models.Model):
 class PetriNet(models.Model):
     name = models.CharField(max_length=100)
     theme = models.ForeignKey(Theme, on_delete=models.CASCADE, related_name='petri_nets')
-    layer = models.ForeignKey(Layer, on_delete=models.CASCADE, related_name='petri_nets')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.name} ({self.theme.name} - {self.layer.name})"
 
     class Meta:
-        unique_together = ['name', 'theme', 'layer']
+        unique_together = ['name', 'theme']
         ordering = ['name']
 
 

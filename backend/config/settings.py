@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     'drf_yasg',
     'corsheaders',
     'django_extensions',
+    'whitenoise',
     
     'rdp.apps.RdpConfig',
 ]

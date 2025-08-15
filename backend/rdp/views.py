@@ -4,7 +4,7 @@ from rest_framework import status
 from .models import Theme, Layer, PetriNet, Place, Transition, Arc
 from .serializers import (
     ThemeSerializer, LayerSerializer, PetriNetSerializer,
-    PlaceSerializer, TransitionSerializer, ArcSerializer
+    PlaceSerializer, TransitionSerializer, ArcSerializer, ThemeDetailSerializer
 )
 
 
@@ -29,10 +29,13 @@ class ThemeRetrieveView(APIView):
     def get(self, request, pk):
         try:
             theme = Theme.objects.get(pk=pk)
-            serializer = ThemeSerializer(theme)
+            serializer = ThemeDetailSerializer(theme)
             return Response(serializer.data)
         except Theme.DoesNotExist:
             return Response({'error': 'Theme not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(e)
+            return Response({'erreur':str(e)}, status=500)
 
 
 class ThemeUpdateView(APIView):

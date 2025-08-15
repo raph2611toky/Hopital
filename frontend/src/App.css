@@ -8,9 +8,10 @@ body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
   background: #f8fafc;
   color: #1e293b;
+  height: 200vh;
 }
 
 .App {
-  height: 100vh;
-  width: 100vw;
+  height: 200vh;
+  width: 99vw;
 }
