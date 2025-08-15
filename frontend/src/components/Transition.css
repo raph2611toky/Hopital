@@ -1,14 +1,20 @@
 .transition {
   position: absolute;
-  width: 30px;
-  height: 50px;
   user-select: none;
   transition: all 0.2s ease;
 }
 
+.transition.portrait {
+  width: 36px; /* 30px + 3px margin x 2 */
+  height: 56px; /* 50px + 3px margin x 2 */
+}
+
+.transition.landscape {
+  width: 56px; /* 50px + 3px margin x 2 */
+  height: 36px; /* 30px + 3px margin x 2 */
+}
+
 .transition-rect {
-  width: 30px;
-  height: 50px;
   border: 3px solid #374151;
   background: #ffffff;
   position: relative;
@@ -17,6 +23,18 @@
   justify-content: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
+  border-radius: 2px;
+  margin: 3px; /* Added 3px margin for better arrow visibility */
+}
+
+.transition.portrait .transition-rect {
+  width: 30px;
+  height: 50px;
+}
+
+.transition.landscape .transition-rect {
+  width: 50px;
+  height: 30px;
 }
 
 .transition:hover .transition-rect {
@@ -24,10 +42,12 @@
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
+/* Enhanced selection with more visible blue color and glow effect */
 .transition.selected .transition-rect {
-  border-color: #3b82f6;
+  border-color: #2563eb;
   border-width: 4px;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3), 0 0 20px rgba(37, 99, 235, 0.2);
+  background: #eff6ff;
 }
 
 .transition.connecting .transition-rect {
@@ -35,9 +55,16 @@
   background: #ecfdf5;
 }
 
+/* Enhanced dragged state with yellow color and stronger visual feedback */
+.transition.dragged .transition-rect {
+  border-color: #eab308;
+  background: #fef3c7;
+  box-shadow: 0 8px 25px rgba(234, 179, 8, 0.4), 0 0 0 3px rgba(234, 179, 8, 0.2);
+  transform: scale(1.1);
+}
+
 .transition-label {
   position: absolute;
-  top: 60px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 12px;
@@ -50,48 +77,15 @@
   border: 1px solid #e5e7eb;
 }
 
+.transition.portrait .transition-label {
+  top: 63px; /* Adjusted for portrait container size */
+}
+
+.transition.landscape .transition-label {
+  top: 43px; /* Adjusted for landscape container size */
+}
+
 .transition-timer {
   font-size: 16px;
   color: #f59e0b;
-}
-
-/* Points de connexion */
-.connection-point {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background: #3b82f6;
-  border-radius: 50%;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  pointer-events: none;
-}
-
-.transition:hover .connection-point,
-.transition.connecting .connection-point {
-  opacity: 1;
-}
-
-.connection-point.top {
-  top: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.connection-point.right {
-  right: -4px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.connection-point.bottom {
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.connection-point.left {
-  left: -4px;
-  top: 50%;
-  transform: translateY(-50%);
 }

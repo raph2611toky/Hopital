@@ -3,7 +3,7 @@
 import { useState } from "react"
 import "./PropertiesPanel.css"
 
-const PropertiesPanel = ({ selected, onUpdate }) => {
+const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
   const [editedValues, setEditedValues] = useState({})
   const [hasChanges, setHasChanges] = useState(false)
 
@@ -23,6 +23,13 @@ const PropertiesPanel = ({ selected, onUpdate }) => {
   const handleCancel = () => {
     setEditedValues({})
     setHasChanges(false)
+  }
+
+  const handleDelete = () => {
+    if (selected) {
+      const type = isPlace ? "place" : isTransition ? "transition" : "arc"
+      onDelete(selected.id, type)
+    }
   }
 
   const getValue = (field) => {
@@ -80,29 +87,14 @@ const PropertiesPanel = ({ selected, onUpdate }) => {
             </div>
 
             <div className="property-group">
-              <label htmlFor="capacity">Capacité</label>
+              <label htmlFor="tokenColor">Couleur des jetons</label>
               <input
-                id="capacity"
-                type="number"
-                min="1"
-                value={getValue("capacity")}
-                onChange={(e) => handleInputChange("capacity", Number.parseInt(e.target.value) || 10)}
+                id="tokenColor"
+                type="color"
+                value={getValue("tokenColor") || "#000000"}
+                onChange={(e) => handleInputChange("tokenColor", e.target.value)}
                 className="property-input"
               />
-            </div>
-
-            <div className="property-group">
-              <label htmlFor="type">Type</label>
-              <select
-                id="type"
-                value={getValue("type")}
-                onChange={(e) => handleInputChange("type", e.target.value)}
-                className="property-select"
-              >
-                <option value="resource">Ressource</option>
-                <option value="buffer">Buffer</option>
-                <option value="condition">Condition</option>
-              </select>
             </div>
           </>
         )}
@@ -128,23 +120,22 @@ const PropertiesPanel = ({ selected, onUpdate }) => {
                 onChange={(e) => handleInputChange("type", e.target.value)}
                 className="property-select"
               >
-                <option value="instant">Instantané</option>
-                <option value="timed">Temporisé</option>
-                <option value="stochastic">Stochastique</option>
+                <option value="immediate">Immédiate</option>
+                <option value="timed">Temporisée</option>
               </select>
             </div>
 
             <div className="property-group">
-              <label htmlFor="delay">Délai (ms)</label>
-              <input
-                id="delay"
-                type="number"
-                min="0"
-                value={getValue("delay")}
-                onChange={(e) => handleInputChange("delay", Number.parseInt(e.target.value) || 0)}
-                className="property-input"
-                disabled={getValue("type") === "instant"}
-              />
+              <label htmlFor="orientation">Orientation</label>
+              <select
+                id="orientation"
+                value={getValue("orientation") || "portrait"}
+                onChange={(e) => handleInputChange("orientation", e.target.value)}
+                className="property-select"
+              >
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Paysage</option>
+              </select>
             </div>
 
             <div className="property-group">
@@ -198,17 +189,22 @@ const PropertiesPanel = ({ selected, onUpdate }) => {
             </div>
           </>
         )}
+      </div>
 
+      <div className="form-actions">
         {hasChanges && (
-          <div className="form-actions">
+          <>
             <button className="save-button" onClick={handleSave}>
               Sauvegarder
             </button>
             <button className="cancel-button" onClick={handleCancel}>
               Annuler
             </button>
-          </div>
+          </>
         )}
+        <button className="delete-button" onClick={handleDelete}>
+          Supprimer
+        </button>
       </div>
     </div>
   )

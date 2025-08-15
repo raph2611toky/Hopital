@@ -1,64 +1,69 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useRef } from "react"
 import "./Transition.css"
 
 const Transition = ({
   transition,
-  onSelect,
-  onStartConnection,
-  onEndConnection,
-  onContextMenu,
+  onLeftMouseDown,
+  onLeftMouseUp,
+  onRightClick,
+  onLeftClick,
   selected,
   isConnecting,
+  isDragged,
 }) => {
-  const [isDragging, setIsDragging] = useState(false)
   const transitionRef = useRef(null)
 
   const handleMouseDown = (event) => {
-    if (event.button === 0) {
-      event.stopPropagation()
+    event.stopPropagation()
 
-      if (event.shiftKey) {
-        // Mode connexion avec Shift+clic
-        onStartConnection()
-      } else {
-        // Mode sélection
-        onSelect()
-        setIsDragging(true)
-      }
+    if (event.button === 0) {
+      onLeftMouseDown(event)
     }
   }
 
   const handleMouseUp = (event) => {
-    if (isConnecting) {
-      onEndConnection()
+    if (event.button === 0) {
+      onLeftMouseUp()
+    } else if (event.button === 2) {
+      onRightClick(event)
     }
-    setIsDragging(false)
   }
+
+  const handleClick = (event) => {
+    event.stopPropagation()
+    onLeftClick && onLeftClick(event)
+  }
+
+  const handleContextMenu = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    onRightClick(event)
+  }
+
+  // Adjust positioning based on orientation
+  const isLandscape = transition.orientation === "landscape"
+  const offsetX = isLandscape ? 28 : 18 // Half of 56px (landscape) or 36px (portrait)
+  const offsetY = isLandscape ? 18 : 28 // Half of 36px (landscape) or 56px (portrait)
 
   return (
     <div
       ref={transitionRef}
-      className={`transition petri-element ${selected ? "selected" : ""} ${isConnecting ? "connecting" : ""}`}
+      className={`transition petri-element ${selected ? "selected" : ""} ${isConnecting ? "connecting" : ""} ${isDragged ? "dragged" : ""} ${isLandscape ? "landscape" : "portrait"}`}
       style={{
-        left: transition.position.x - 15,
-        top: transition.position.y - 25,
-        cursor: isDragging ? "grabbing" : "grab",
+        left: transition.position.x - offsetX,
+        top: transition.position.y - offsetY,
+        cursor: isDragged ? "grabbing" : isConnecting ? "crosshair" : "pointer",
       }}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
-      onContextMenu={onContextMenu}
+      onClick={handleClick}
+      onContextMenu={handleContextMenu}
       title={transition.label}
     >
       <div className="transition-rect">{transition.type === "timed" && <div className="transition-timer">⏱</div>}</div>
       <div className="transition-label">{transition.label}</div>
-
-      {/* Points de connexion */}
-      <div className="connection-point top" />
-      <div className="connection-point right" />
-      <div className="connection-point bottom" />
-      <div className="connection-point left" />
     </div>
   )
 }

@@ -26,26 +26,33 @@ const PetriEditor = () => {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
 
-  // États pour la création d'arcs
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectingFrom, setConnectingFrom] = useState(null)
   const [tempArc, setTempArc] = useState(null)
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+
+  const [draggedElement, setDraggedElement] = useState(null)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [leftClickTimer, setLeftClickTimer] = useState(null)
+  const [leftClickStart, setLeftClickStart] = useState(null)
 
   // Gestion du clic droit sur le canvas
   const handleCanvasContextMenu = useCallback(
     (event) => {
       event.preventDefault()
-      const rect = canvasRef.current.getBoundingClientRect()
-      const x = (event.clientX - rect.left - transform.x) / transform.scale
-      const y = (event.clientY - rect.top - transform.y) / transform.scale
+      if (!event.target.closest(".petri-element")) {
+        const rect = canvasRef.current.getBoundingClientRect()
+        const x = (event.clientX - rect.left - transform.x) / transform.scale
+        const y = (event.clientY - rect.top - transform.y) / transform.scale
 
-      setContextMenu({
-        x: event.clientX,
-        y: event.clientY,
-        visible: true,
-        type: "canvas",
-        position: { x, y },
-      })
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          visible: true,
+          type: "canvas",
+          position: { x, y },
+        })
+      }
     },
     [transform],
   )
@@ -70,7 +77,6 @@ const PetriEditor = () => {
     [transform],
   )
 
-  // Gestion du drag pour le pan
   const handleMouseDown = useCallback(
     (event) => {
       if (event.button === 0 && !event.target.closest(".petri-element")) {
@@ -83,6 +89,12 @@ const PetriEditor = () => {
 
   const handleMouseMove = useCallback(
     (event) => {
+      const rect = canvasRef.current.getBoundingClientRect()
+      const x = (event.clientX - rect.left - transform.x) / transform.scale
+      const y = (event.clientY - rect.top - transform.y) / transform.scale
+
+      setMousePosition({ x, y })
+
       if (isDragging) {
         setTransform((prev) => ({
           ...prev,
@@ -91,101 +103,88 @@ const PetriEditor = () => {
         }))
       }
 
+      if (draggedElement) {
+        const newPosition = {
+          x: x - dragOffset.x,
+          y: y - dragOffset.y,
+        }
+
+        if (draggedElement.tokens !== undefined) {
+          // C'est une place
+          setPlaces((prev) => prev.map((p) => (p.id === draggedElement.id ? { ...p, position: newPosition } : p)))
+        } else {
+          // C'est une transition
+          setTransitions((prev) => prev.map((t) => (t.id === draggedElement.id ? { ...t, position: newPosition } : t)))
+        }
+      }
+
       // Mise à jour de l'arc temporaire pendant la connexion
       if (isConnecting && connectingFrom) {
-        const rect = canvasRef.current.getBoundingClientRect()
-        const x = (event.clientX - rect.left - transform.x) / transform.scale
-        const y = (event.clientY - rect.top - transform.y) / transform.scale
-
         setTempArc({
           from: connectingFrom.position,
           to: { x, y },
         })
       }
     },
-    [isDragging, dragStart, isConnecting, connectingFrom, transform],
+    [isDragging, dragStart, isConnecting, connectingFrom, transform, draggedElement, dragOffset],
   )
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false)
-    if (isConnecting) {
+    setDraggedElement(null)
+    if (leftClickTimer) {
+      clearTimeout(leftClickTimer)
+      setLeftClickTimer(null)
+    }
+    setLeftClickStart(null)
+
+    if (isConnecting && !event.target.closest(".petri-element")) {
       setIsConnecting(false)
       setConnectingFrom(null)
       setTempArc(null)
     }
-  }, [isConnecting])
+  }, [isConnecting, leftClickTimer])
 
-  // Fermer le menu contextuel
-  const closeContextMenu = useCallback(() => {
-    setContextMenu((prev) => ({ ...prev, visible: false }))
-  }, [])
-
-  // Ajouter une place
-  const addPlace = useCallback(
-    (position) => {
-      const id = `p${Date.now()}`
-      const newPlace = {
-        id,
-        label: `Place ${places.length + 1}`,
-        tokens: 0,
-        position,
-        type: "resource",
-        capacity: 10,
-      }
-
-      setPlaces((prev) => [...prev, newPlace])
-      netRef.current.addPlace(newPlace)
-      closeContextMenu()
-    },
-    [places.length, closeContextMenu],
-  )
-
-  // Ajouter une transition
-  const addTransition = useCallback(
-    (position) => {
-      const id = `t${Date.now()}`
-      const newTransition = {
-        id,
-        label: `Transition ${transitions.length + 1}`,
-        position,
-        type: "instant",
-        delay: 0,
-        priority: 1,
-      }
-
-      setTransitions((prev) => [...prev, newTransition])
-      netRef.current.addTransition(newTransition)
-      closeContextMenu()
-    },
-    [transitions.length, closeContextMenu],
-  )
-
-  // Commencer la connexion
-  const startConnection = useCallback((element) => {
+  const startArcCreation = useCallback((element) => {
     setIsConnecting(true)
     setConnectingFrom(element)
   }, [])
 
-  // Terminer la connexion
-  const endConnection = useCallback(
+  const finishArcCreation = useCallback(
     (targetElement) => {
       if (connectingFrom && targetElement && connectingFrom.id !== targetElement.id) {
-        // Vérifier que la connexion est valide (place -> transition ou transition -> place)
-        const sourceType = connectingFrom.type || (connectingFrom.tokens !== undefined ? "place" : "transition")
-        const targetType = targetElement.type || (targetElement.tokens !== undefined ? "place" : "transition")
+        const sourceType = connectingFrom.tokens !== undefined ? "place" : "transition"
+        const targetType = targetElement.tokens !== undefined ? "place" : "transition"
 
+        console.log("[v0] Arc creation attempt:", { sourceType, targetType, connectingFrom, targetElement })
+
+        // Empêcher les connexions place-place et transition-transition
         if (sourceType !== targetType) {
-          const newArc = {
-            id: `a${Date.now()}`,
-            source: connectingFrom.id,
-            target: targetElement.id,
-            weight: 1,
-            isInhibitor: false,
-            isReset: false,
-          }
+          // Vérifier qu'un arc n'existe pas déjà entre ces éléments
+          const existingArc = arcs.find(
+            (arc) =>
+              (arc.source === connectingFrom.id && arc.target === targetElement.id) ||
+              (arc.source === targetElement.id && arc.target === connectingFrom.id),
+          )
 
-          setArcs((prev) => [...prev, newArc])
-          netRef.current.addArc(newArc)
+          if (!existingArc) {
+            const newArc = {
+              id: `a${Date.now()}`,
+              source: connectingFrom.id,
+              target: targetElement.id,
+              weight: 1,
+              isInhibitor: false,
+              isReset: false,
+            }
+
+            console.log("[v0] Creating new arc:", newArc)
+            setArcs((prev) => [...prev, newArc])
+            netRef.current.addArc(newArc)
+          } else {
+            console.log("[v0] Arc already exists between these elements")
+          }
+        } else {
+          console.log("[v0] Cannot create arc between same element types:", sourceType)
         }
       }
 
@@ -193,57 +192,71 @@ const PetriEditor = () => {
       setConnectingFrom(null)
       setTempArc(null)
     },
-    [connectingFrom],
+    [connectingFrom, arcs],
   )
 
-  // Supprimer un élément
-  const deleteElement = useCallback(
-    (elementId, elementType) => {
-      if (elementType === "place") {
-        setPlaces((prev) => prev.filter((p) => p.id !== elementId))
-        netRef.current.removePlace(elementId)
-      } else if (elementType === "transition") {
-        setTransitions((prev) => prev.filter((t) => t.id !== elementId))
-        netRef.current.removeTransition(elementId)
-      } else if (elementType === "arc") {
-        setArcs((prev) => prev.filter((a) => a.id !== elementId))
-        netRef.current.removeArc(elementId)
-      }
-
-      // Supprimer les arcs connectés
-      setArcs((prev) => prev.filter((a) => a.source !== elementId && a.target !== elementId))
-      closeContextMenu()
-    },
-    [closeContextMenu],
-  )
-
-  // Ajouter/enlever des jetons
-  const modifyTokens = useCallback(
-    (placeId, delta) => {
-      setPlaces((prev) => prev.map((p) => (p.id === placeId ? { ...p, tokens: Math.max(0, p.tokens + delta) } : p)))
-      closeContextMenu()
-    },
-    [closeContextMenu],
-  )
-
-  // Mise à jour des propriétés depuis le panneau
-  const updateElement = useCallback(
-    (elementId, updates) => {
-      if (selected?.tokens !== undefined) {
-        // C'est une place
-        setPlaces((prev) => prev.map((p) => (p.id === elementId ? { ...p, ...updates } : p)))
-      } else if (selected?.source) {
-        // C'est un arc
-        setArcs((prev) => prev.map((a) => (a.id === elementId ? { ...a, ...updates } : a)))
-      } else {
-        // C'est une transition
-        setTransitions((prev) => prev.map((t) => (t.id === elementId ? { ...t, ...updates } : t)))
+  const handleElementLeftClick = useCallback(
+    (element) => {
+      if (isConnecting && connectingFrom && connectingFrom.id !== element.id) {
+        finishArcCreation(element);
+      } else if (!isConnecting) {
+        startArcCreation(element);
       }
     },
-    [selected],
+    [isConnecting, connectingFrom, startArcCreation, finishArcCreation]
+  );
+
+  const startElementLeftClick = useCallback(
+    (element, event) => {
+      const startTime = Date.now()
+      setLeftClickStart(startTime)
+
+      // Set a timer to distinguish between click and drag
+      const timer = setTimeout(() => {
+        // If we reach here, it's a drag operation
+        const rect = canvasRef.current.getBoundingClientRect()
+        const x = (event.clientX - rect.left - transform.x) / transform.scale
+        const y = (event.clientY - rect.top - transform.y) / transform.scale
+
+        setDraggedElement(element)
+        setDragOffset({
+          x: x - element.position.x,
+          y: y - element.position.y,
+        })
+      }, 150) // 150ms threshold for drag vs click
+
+      setLeftClickTimer(timer)
+    },
+    [transform],
   )
 
-  // Contrôles de simulation
+  const handleElementLeftUp = useCallback(
+    (element) => {
+      if (leftClickTimer) {
+        clearTimeout(leftClickTimer)
+        setLeftClickTimer(null)
+      }
+
+      // If it was a quick click (not a drag), handle arc creation
+      if (leftClickStart && Date.now() - leftClickStart < 150) {
+        handleElementLeftClick(element)
+      }
+
+      setLeftClickStart(null)
+    },
+    [leftClickTimer, leftClickStart, handleElementLeftClick],
+  )
+
+  const handleElementRightClick = useCallback((element, event) => {
+    event.preventDefault()
+    setSelected(element)
+  }, [])
+
+  // Fermer le menu contextuel
+  const closeContextMenu = useCallback(() => {
+    setContextMenu((prev) => ({ ...prev, visible: false }))
+  }, [])
+
   const playSimulation = useCallback(() => {
     if (!simulationInterval) {
       const interval = setInterval(() => {
@@ -276,6 +289,64 @@ const PetriEditor = () => {
         })),
       )
     })
+  }, [])
+
+  const addPlace = useCallback(
+    (position) => {
+      const newPlace = {
+        id: `p${Date.now()}`,
+        position,
+        tokens: 0,
+        label: `Place ${places.length + 1}`,
+        capacity: 10,
+        type: "resource",
+        tokenColor: "#000000",
+      }
+      setPlaces((prev) => [...prev, newPlace])
+      netRef.current.addPlace(newPlace)
+    },
+    [places.length],
+  )
+
+  const addTransition = useCallback(
+    (position) => {
+      const newTransition = {
+        id: `t${Date.now()}`,
+        position,
+        label: `Transition ${transitions.length + 1}`,
+        type: "immediate",
+        delay: 0,
+        priority: 1,
+        orientation: "portrait",
+      }
+      setTransitions((prev) => [...prev, newTransition])
+      netRef.current.addTransition(newTransition)
+    },
+    [transitions.length],
+  )
+
+  const deleteElement = useCallback((id, type) => {
+    if (type === "place") {
+      setPlaces((prev) => prev.filter((p) => p.id !== id))
+      netRef.current.removePlace(id)
+    } else if (type === "transition") {
+      setTransitions((prev) => prev.filter((t) => t.id !== id))
+      netRef.current.removeTransition(id)
+    } else if (type === "arc") {
+      setArcs((prev) => prev.filter((a) => a.id !== id))
+      netRef.current.removeArc(id)
+    }
+  }, [])
+
+  const modifyTokens = useCallback((id, amount) => {
+    setPlaces((prev) => prev.map((p) => (p.id === id ? { ...p, tokens: Math.max(0, p.tokens + amount) } : p)))
+    netRef.current.modifyTokens(id, amount)
+  }, [])
+
+  const updateElement = useCallback((id, updates) => {
+    setPlaces((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)))
+    setTransitions((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+    setArcs((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)))
   }, [])
 
   // Event listeners
@@ -324,7 +395,6 @@ const PetriEditor = () => {
             {/* Grille de fond */}
             <div className="grid-background" />
 
-            {/* Arcs */}
             {arcs.map((arc) => {
               const sourceElement =
                 places.find((p) => p.id === arc.source) || transitions.find((t) => t.id === arc.source)
@@ -338,6 +408,8 @@ const PetriEditor = () => {
                     arc={arc}
                     source={sourceElement}
                     target={targetElement}
+                    places={places}
+                    transitions={transitions}
                     onSelect={() => setSelected(arc)}
                     onContextMenu={(event) => {
                       event.preventDefault()
@@ -349,6 +421,7 @@ const PetriEditor = () => {
                         element: arc,
                       })
                     }}
+                    onUpdate={updateElement}
                     selected={selected?.id === arc.id}
                   />
                 )
@@ -358,7 +431,10 @@ const PetriEditor = () => {
 
             {/* Arc temporaire pendant la connexion */}
             {tempArc && (
-              <svg className="temp-arc">
+              <svg
+                className="temp-arc"
+                style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+              >
                 <line
                   x1={tempArc.from.x}
                   y1={tempArc.from.y}
@@ -376,51 +452,41 @@ const PetriEditor = () => {
               <Place
                 key={place.id}
                 place={place}
-                onSelect={() => setSelected(place)}
-                onStartConnection={() => startConnection(place)}
-                onEndConnection={() => endConnection(place)}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  setContextMenu({
-                    x: event.clientX,
-                    y: event.clientY,
-                    visible: true,
-                    type: "place",
-                    element: place,
-                  })
-                }}
+                onLeftMouseDown={(event) => startElementLeftClick(place, event)}
+                onLeftMouseUp={() => handleElementLeftUp(place)}
+                onRightClick={(event) => handleElementRightClick(place, event)}
+                onLeftClick={() => handleElementLeftClick(place)}
                 selected={selected?.id === place.id}
                 isConnecting={isConnecting}
+                isDragged={draggedElement?.id === place.id}
               />
             ))}
 
-            {/* Transitions */}
             {transitions.map((transition) => (
               <Transition
                 key={transition.id}
                 transition={transition}
-                onSelect={() => setSelected(transition)}
-                onStartConnection={() => startConnection(transition)}
-                onEndConnection={() => endConnection(transition)}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  setContextMenu({
-                    x: event.clientX,
-                    y: event.clientY,
-                    visible: true,
-                    type: "transition",
-                    element: transition,
-                  })
-                }}
+                onLeftMouseDown={(event) => startElementLeftClick(transition, event)}
+                onLeftMouseUp={() => handleElementLeftUp(transition)}
+                onRightClick={(event) => handleElementRightClick(transition, event)}
+                onLeftClick={() => handleElementLeftClick(transition)}
                 selected={selected?.id === transition.id}
                 isConnecting={isConnecting}
+                isDragged={draggedElement?.id === transition.id}
               />
             ))}
           </div>
         </div>
 
         <div className="sidebar">
-          <PropertiesPanel selected={selected} onUpdate={updateElement} />
+          <PropertiesPanel
+            selected={selected}
+            onUpdate={updateElement}
+            onDelete={(id, type) => {
+              deleteElement(id, type)
+              setSelected(null)
+            }}
+          />
         </div>
       </div>
 
@@ -435,13 +501,10 @@ const PetriEditor = () => {
         onAddTransition={() => addTransition(contextMenu.position)}
         onDelete={() => {
           const element = contextMenu.element
-          if (element) {
-            const type = element.tokens !== undefined ? "place" : element.source ? "arc" : "transition"
-            deleteElement(element.id, type)
+          if (element && contextMenu.type === "arc") {
+            deleteElement(element.id, "arc")
           }
         }}
-        onAddTokens={() => modifyTokens(contextMenu.element?.id, 1)}
-        onRemoveTokens={() => modifyTokens(contextMenu.element?.id, -1)}
       />
     </div>
   )

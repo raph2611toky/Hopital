@@ -1,96 +1,202 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import "./Arc.css"
+import { useState, useEffect } from "react";
+import "./Arc.css";
 
-const Arc = ({ arc, source, target, onSelect, onContextMenu, selected }) => {
-  const [isEditingWeight, setIsEditingWeight] = useState(false)
-  const [tempWeight, setTempWeight] = useState(arc.weight)
+const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu, selected, onUpdate }) => {
+  const [isEditingWeight, setIsEditingWeight] = useState(false);
+  const [tempWeight, setTempWeight] = useState(arc.weight);
 
-  // Calculer les points de connexion
-  const getConnectionPoint = (element, direction) => {
-    const isPlace = element.tokens !== undefined
-    const radius = isPlace ? 30 : 15
-    const height = isPlace ? 30 : 25
+  // Mettre à jour tempWeight seulement si arc.weight change depuis l'extérieur
+  useEffect(() => {
+    setTempWeight(arc.weight);
+  }, [arc.weight]);
 
-    switch (direction) {
-      case "top":
-        return { x: element.position.x, y: element.position.y - height }
-      case "right":
-        return { x: element.position.x + radius, y: element.position.y }
-      case "bottom":
-        return { x: element.position.x, y: element.position.y + height }
-      case "left":
-        return { x: element.position.x - radius, y: element.position.y }
-      default:
-        return element.position
+  const calculateCurvedPath = () => {
+    let start = { ...source.position };
+    let end = { ...target.position };
+
+    const isSourcePlace = places.some((place) => place.id === source.id);
+    const isTargetPlace = places.some((place) => place.id === target.id);
+    const isSourceTransition = transitions.some((transition) => transition.id === source.id);
+    const isTargetTransition = transitions.some((transition) => transition.id === target.id);
+
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const unitX = distance > 0 ? dx / distance : 0;
+    const unitY = distance > 0 ? dy / distance : 0;
+
+    // Ajuster départ
+    if (isSourcePlace) {
+      const radius = 30;
+      start = {
+        x: source.position.x + unitX * radius,
+        y: source.position.y + unitY * radius,
+      };
+    } else if (isSourceTransition) {
+      const sourceTransition = transitions.find((t) => t.id === source.id);
+      const isLandscape = sourceTransition?.orientation === "landscape";
+      const halfWidth = isLandscape ? 25 : 15;
+      const halfHeight = isLandscape ? 15 : 25;
+      const tX = halfWidth / Math.abs(dx || 1);
+      const tY = halfHeight / Math.abs(dy || 1);
+      const t = Math.min(tX, tY);
+      const intersectionX = dx * t;
+      const intersectionY = dy * t;
+      const magnitude = Math.sqrt(intersectionX * intersectionX + intersectionY * intersectionY);
+      const scale = magnitude > 0 ? (halfWidth * halfHeight) / magnitude : 1;
+      start = {
+        x: source.position.x + (intersectionX / magnitude) * scale * (dx > 0 ? 1 : -1),
+        y: source.position.y + (intersectionY / magnitude) * scale * (dy > 0 ? 1 : -1),
+      };
     }
-  }
 
-  // Trouver la meilleure direction de connexion
-  const getBestConnectionPoints = () => {
-    const dx = target.position.x - source.position.x
-    const dy = target.position.y - source.position.y
+    // Ajuster arrivée
+    if (isTargetPlace) {
+      const radius = 30;
+      end = {
+        x: target.position.x - unitX * radius,
+        y: target.position.y - unitY * radius,
+      };
+    } else if (isTargetTransition) {
+      const targetTransition = transitions.find((t) => t.id === target.id);
+      const isLandscape = targetTransition?.orientation === "landscape";
+      const halfWidth = isLandscape ? 25 : 15;
+      const halfHeight = isLandscape ? 15 : 25;
+      const tX = halfWidth / Math.abs(dx || 1);
+      const tY = halfHeight / Math.abs(dy || 1);
+      const t = Math.min(tX, tY);
+      const intersectionX = dx * t;
+      const intersectionY = dy * t;
+      const magnitude = Math.sqrt(intersectionX * intersectionX + intersectionY * intersectionY);
+      const scale = magnitude > 0 ? (halfWidth * halfHeight) / magnitude : 1;
+      end = {
+        x: target.position.x - (intersectionX / magnitude) * scale * (dx > 0 ? 1 : -1),
+        y: target.position.y - (intersectionY / magnitude) * scale * (dy > 0 ? 1 : -1),
+      };
+    }
 
-    let sourceDir, targetDir
+    const obstacles = [...places, ...transitions].filter(
+      (element) => element.id !== source.id && element.id !== target.id
+    );
 
-    if (Math.abs(dx) > Math.abs(dy)) {
-      sourceDir = dx > 0 ? "right" : "left"
-      targetDir = dx > 0 ? "left" : "right"
+    let hasObstacle = false;
+    const midX = (start.x + end.x) / 2;
+    const midY = (start.y + end.y) / 2;
+
+    obstacles.forEach((obstacle) => {
+      const distToLine =
+        Math.abs(
+          (end.y - start.y) * obstacle.position.x -
+            (end.x - start.x) * obstacle.position.y +
+            end.x * start.y -
+            end.y * start.x
+        ) / Math.sqrt(Math.pow(end.y - start.y, 2) + Math.pow(end.x - start.x, 2));
+
+      if (distToLine < 50) {
+        hasObstacle = true;
+      }
+    });
+
+    if (hasObstacle) {
+      const dxCurved = end.x - start.x;
+      const dyCurved = end.y - start.y;
+      const distanceCurved = Math.sqrt(dxCurved * dxCurved + dyCurved * dyCurved);
+      const controlOffset = Math.min(distanceCurved * 0.35, 80);
+      const perpX = (-dyCurved / distanceCurved) * controlOffset;
+      const perpY = (dxCurved / distanceCurved) * controlOffset;
+      const angle = Math.atan2(dyCurved, dxCurved);
+      const offsetMultiplier = Math.abs(Math.cos(angle)) + Math.abs(Math.sin(angle));
+      const controlX1 = start.x + dxCurved * 0.25 + perpX * 0.5 * offsetMultiplier;
+      const controlY1 = start.y + dyCurved * 0.25 + perpY * 0.5 * offsetMultiplier;
+      const controlX2 = start.x + dxCurved * 0.75 + perpX * 0.5 * offsetMultiplier;
+      const controlY2 = start.y + dyCurved * 0.75 + perpY * 0.5 * offsetMultiplier;
+
+      return {
+        path: `M ${start.x} ${start.y} C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${end.x} ${end.y}`,
+        midPoint: {
+          x: (start.x + controlX1 + controlX2 + end.x) / 4,
+          y: (start.y + controlY1 + controlY2 + end.y) / 4,
+        },
+        isCurved: true,
+        start,
+        end,
+      };
     } else {
-      sourceDir = dy > 0 ? "bottom" : "top"
-      targetDir = dy > 0 ? "top" : "bottom"
+      return {
+        path: `M ${start.x} ${start.y} L ${end.x} ${end.y}`,
+        midPoint: { x: midX, y: midY },
+        isCurved: false,
+        start,
+        end,
+      };
     }
+  };
 
-    return {
-      start: getConnectionPoint(source, sourceDir),
-      end: getConnectionPoint(target, targetDir),
-    }
-  }
+  const pathData = calculateCurvedPath();
 
-  const { start, end } = getBestConnectionPoints()
+  const calculateArrowAngle = () => {
+    const dx = pathData.end.x - pathData.start.x;
+    const dy = pathData.end.y - pathData.start.y;
+    return (Math.atan2(dy, dx) * 180) / Math.PI;
+  };
 
-  // Calculer le point milieu pour le poids
-  const midX = (start.x + end.x) / 2
-  const midY = (start.y + end.y) / 2
-
-  // Calculer l'angle pour la flèche
-  const angle = (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI
+  const arrowAngle = calculateArrowAngle();
 
   const handleWeightClick = (event) => {
-    event.stopPropagation()
-    setIsEditingWeight(true)
-    setTempWeight(arc.weight)
-  }
+    event.stopPropagation();
+    setIsEditingWeight(true);
+  };
 
   const handleWeightSubmit = (event) => {
-    event.preventDefault()
-    const newWeight = Number.parseInt(tempWeight) || 1
-    // Ici vous pouvez appeler une fonction pour mettre à jour le poids
-    setIsEditingWeight(false)
-  }
+    event.preventDefault();
+    event.stopPropagation();
+    const newWeight = Math.max(1, parseInt(tempWeight, 10) || 1);
+    if (onUpdate && newWeight !== arc.weight) {
+      onUpdate(arc.id, { weight: newWeight });
+    }
+    setIsEditingWeight(false);
+  };
 
-  const handleWeightCancel = () => {
-    setIsEditingWeight(false)
-    setTempWeight(arc.weight)
-  }
+  const handleWeightCancel = (event) => {
+    event.stopPropagation();
+    setIsEditingWeight(false);
+    setTempWeight(arc.weight); // on remet juste si cancel explicite
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (isEditingWeight && !event.target.closest(".weight-form-container")) {
+        setIsEditingWeight(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isEditingWeight]);
 
   return (
     <div className="arc-container">
-      <svg className="arc-svg">
+      <svg className="arc-svg" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}>
         <defs>
-          <marker id={`arrowhead-${arc.id}`} markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill={selected ? "#3b82f6" : "#374151"} />
+          <marker
+            id={`arrowhead-${arc.id}`}
+            markerWidth="10"
+            markerHeight="10"
+            refX="9.5"
+            refY="3"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path d="M0,0 L0,6 L9,3 z" fill={selected ? "#3b82f6" : "#374151"} />
           </marker>
         </defs>
 
-        <line
-          x1={start.x}
-          y1={start.y}
-          x2={end.x}
-          y2={end.y}
+        <path
+          d={pathData.path}
           stroke={selected ? "#3b82f6" : "#374151"}
           strokeWidth={selected ? "3" : "2"}
+          fill="none"
           markerEnd={`url(#arrowhead-${arc.id})`}
           className="arc-line"
           onClick={onSelect}
@@ -102,37 +208,61 @@ const Arc = ({ arc, source, target, onSelect, onContextMenu, selected }) => {
         />
 
         {arc.isReset && (
-          <circle cx={midX} cy={midY} r="8" fill="none" stroke={selected ? "#3b82f6" : "#374151"} strokeWidth="2" />
+          <circle
+            cx={pathData.midPoint.x}
+            cy={pathData.midPoint.y}
+            r="8"
+            fill="none"
+            stroke={selected ? "#3b82f6" : "#374151"}
+            strokeWidth="2"
+          />
         )}
       </svg>
 
-      {/* Poids de l'arc */}
       <div
         className={`arc-weight ${selected ? "selected" : ""}`}
         style={{
-          left: midX - 15,
-          top: midY - 15,
+          left: pathData.midPoint.x - 15,
+          top: pathData.midPoint.y - 15,
         }}
         onClick={handleWeightClick}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsEditingWeight(true);
+        }}
       >
         {isEditingWeight ? (
-          <form onSubmit={handleWeightSubmit} className="weight-form">
-            <input
-              type="number"
-              value={tempWeight}
-              onChange={(e) => setTempWeight(e.target.value)}
-              onBlur={handleWeightCancel}
-              autoFocus
-              min="1"
-              className="weight-input"
-            />
-          </form>
+          <div className="weight-form-container">
+            <form onSubmit={handleWeightSubmit} className="weight-form">
+              <input
+                type="number"
+                value={tempWeight}
+                onChange={(e) => setTempWeight(e.target.value)}
+                autoFocus
+                min="1"
+                className="weight-input"
+              />
+              <div className="weight-form-buttons">
+                <button type="submit" className="weight-form-button weight-form-save">
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={handleWeightCancel}
+                  className="weight-form-button weight-form-cancel"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         ) : (
           <span className="weight-value">{arc.weight}</span>
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Arc
+export default Arc;
