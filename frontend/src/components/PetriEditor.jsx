@@ -125,17 +125,151 @@ const PetriEditor = () => {
     localStorage.setItem("currentLayer", currentLayer)
   }, [currentLayer])
 
-  const checkValidation = useCallback(async () => {
-    if (currentPetriNet) {
-      try {
-        const validationResult = await apiService.validatePetriNet(currentPetriNet)
-        setValidation(validationResult)
-      } catch (err) {
-        console.error("[PetriEditor] Failed to validate petri net:", err)
-        setValidation({ deadlock: false, concurrent: 0, bounded: true })
-      }
+  const checkValidation = useCallback(() => {
+    if (!currentPetriNet || places.length === 0) {
+      setValidation({ deadlock: false, concurrent: 0, bounded: true })
+      return
     }
-  }, [currentPetriNet])
+
+    // Check for deadlock - no enabled transitions
+    const enabledTransitions = getEnabledTransitions()
+    const deadlock = enabledTransitions.length === 0 && transitions.length > 0
+
+    // Count concurrent transitions
+    const concurrent = enabledTransitions.length
+
+    // Check boundedness - if any place exceeds capacity or could theoretically grow infinitely
+    const bounded = places.every((place) => {
+      if (place.capacity && place.tokens > place.capacity) return false
+      // Simple heuristic: if tokens > 1000, consider unbounded
+      return place.tokens <= 1000
+    })
+
+    setValidation({ deadlock, concurrent, bounded })
+  }, [currentPetriNet, places, transitions])
+
+  const getEnabledTransitions = useCallback(() => {
+    return transitions.filter((transition) => {
+      // Get input and output arcs for this transition
+      const inputArcs = arcs.filter((arc) => arc.target_id === transition.id_in_net)
+      const outputArcs = arcs.filter((arc) => arc.source_id === transition.id_in_net)
+
+      // Check if transition is enabled
+      for (const arc of inputArcs) {
+        const sourcePlace = places.find((p) => p.id_in_net === arc.source_id)
+        if (!sourcePlace) continue
+
+        if (arc.is_inhibitor) {
+          // Inhibitor arc: transition disabled if place has tokens
+          if (sourcePlace.tokens > 0) return false
+        } else {
+          // Normal arc: need enough tokens
+          if (sourcePlace.tokens < arc.weight) return false
+        }
+      }
+
+      // Check output places capacity constraints
+      for (const arc of outputArcs) {
+        const targetPlace = places.find((p) => p.id_in_net === arc.target_id)
+        if (!targetPlace) continue
+
+        if (targetPlace.capacity && targetPlace.tokens + arc.weight > targetPlace.capacity) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [arcs, places, transitions])
+
+  const fireTransition = useCallback(
+    async (transition) => {
+      const inputArcs = arcs.filter((arc) => arc.target_id === transition.id_in_net)
+      const outputArcs = arcs.filter((arc) => arc.source_id === transition.id_in_net)
+
+      console.log(`[v0] Firing transition: ${transition.label}`)
+
+      // Update places based on arc effects
+      const updatedPlaces = [...places]
+
+      // Process input arcs (consume tokens)
+      for (const arc of inputArcs) {
+        const placeIndex = updatedPlaces.findIndex((p) => p.id_in_net === arc.source_id)
+        if (placeIndex === -1) continue
+
+        if (arc.is_reset) {
+          // Reset arc: remove all tokens
+          updatedPlaces[placeIndex] = { ...updatedPlaces[placeIndex], tokens: 0 }
+        } else if (!arc.is_inhibitor) {
+          // Normal arc: consume tokens
+          updatedPlaces[placeIndex] = {
+            ...updatedPlaces[placeIndex],
+            tokens: Math.max(0, updatedPlaces[placeIndex].tokens - arc.weight),
+          }
+        }
+        // Inhibitor arcs don't consume tokens
+      }
+
+      // Process output arcs (produce tokens)
+      for (const arc of outputArcs) {
+        const placeIndex = updatedPlaces.findIndex((p) => p.id_in_net === arc.target_id)
+        if (placeIndex === -1) continue
+
+        const newTokens = updatedPlaces[placeIndex].tokens + arc.weight
+        const capacity = updatedPlaces[placeIndex].capacity
+
+        updatedPlaces[placeIndex] = {
+          ...updatedPlaces[placeIndex],
+          tokens: capacity ? Math.min(newTokens, capacity) : newTokens,
+        }
+      }
+
+      // Update state with new token counts
+      setPlaces((prevPlaces) =>
+        prevPlaces.map((place) => {
+          const updated = updatedPlaces.find((up) => up.id === place.id)
+          return updated || place
+        }),
+      )
+
+      // Update backend for each modified place
+      for (const updatedPlace of updatedPlaces) {
+        const originalPlace = places.find((p) => p.id === updatedPlace.id)
+        if (originalPlace && originalPlace.tokens !== updatedPlace.tokens) {
+          try {
+            await apiService.updatePlace(updatedPlace.id, { tokens: updatedPlace.tokens })
+          } catch (err) {
+            console.error(`[v0] Failed to update place ${updatedPlace.label}:`, err)
+          }
+        }
+      }
+
+      checkValidation()
+    },
+    [arcs, places, checkValidation],
+  )
+
+  const playSimulation = useCallback(() => {
+    if (!simulationInterval) {
+      const interval = setInterval(() => {
+        const enabledTransitions = getEnabledTransitions()
+
+        if (enabledTransitions.length === 0) {
+          console.warn("[v0] No enabled transitions - stopping simulation (possible deadlock)")
+          clearInterval(interval)
+          setSimulationInterval(null)
+          return
+        }
+
+        // Randomly select an enabled transition to fire
+        const randomIndex = Math.floor(Math.random() * enabledTransitions.length)
+        const selectedTransition = enabledTransitions[randomIndex]
+
+        fireTransition(selectedTransition)
+      }, 1000)
+      setSimulationInterval(interval)
+    }
+  }, [simulationInterval, getEnabledTransitions, fireTransition])
 
   const exportJSON = useCallback(async () => {
     const data = {
@@ -436,37 +570,19 @@ const PetriEditor = () => {
     setContextMenu((prev) => ({ ...prev, visible: false }))
   }, [])
 
-  const playSimulation = useCallback(() => {
-    if (!simulationInterval) {
-      const interval = setInterval(() => {
-        setPlaces((prev) =>
-          prev.map((p) => ({
-            ...p,
-            tokens: Math.max(0, p.tokens + (Math.random() > 0.5 ? 1 : -1)),
-          })),
-        )
-        checkValidation()
-      }, 1000)
-      setSimulationInterval(interval)
-    }
-  }, [simulationInterval, checkValidation])
-
-  const pauseSimulation = useCallback(() => {
-    if (simulationInterval) {
-      clearInterval(simulationInterval)
-      setSimulationInterval(null)
-    }
-  }, [simulationInterval])
-
   const stepSimulation = useCallback(() => {
-    setPlaces((prev) =>
-      prev.map((p) => ({
-        ...p,
-        tokens: Math.max(0, p.tokens + (Math.random() > 0.5 ? 1 : -1)),
-      })),
-    )
-    checkValidation()
-  }, [checkValidation])
+    const enabledTransitions = getEnabledTransitions()
+
+    if (enabledTransitions.length === 0) {
+      console.warn("[v0] No enabled transitions available for step")
+      alert("Aucune transition activée disponible")
+      return
+    }
+
+    // Fire the first enabled transition (or could be random)
+    const transitionToFire = enabledTransitions[0]
+    fireTransition(transitionToFire)
+  }, [getEnabledTransitions, fireTransition])
 
   const addPlace = useCallback(
     async (position) => {
@@ -650,6 +766,10 @@ const PetriEditor = () => {
     }
   }, [handleWheel, handleMouseDown, handleMouseMove, handleMouseUp, handleCanvasContextMenu])
 
+  useEffect(() => {
+    checkValidation()
+  }, [places, transitions, arcs, checkValidation])
+
   return (
     <div className="petri-editor">
       <ThemeSelector selectedTheme={selectedTheme} onThemeSelect={setSelectedTheme} onThemeLoad={handleThemeLoad} />
@@ -686,7 +806,7 @@ const PetriEditor = () => {
           </button>
           <SimulationControls
             onPlay={playSimulation}
-            onPause={pauseSimulation}
+            onPause={() => setSimulationInterval(null)}
             onStep={stepSimulation}
             isPlaying={!!simulationInterval}
           />
