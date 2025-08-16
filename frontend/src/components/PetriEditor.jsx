@@ -10,7 +10,7 @@ import ContextMenu from "./ContextMenu"
 import ThemeSelector from "./ThemeSelector"
 import NetworkManager from "./NetworkManager"
 import LayerManager from "./LayerManager"
-import apiService from "../services/Api_"
+import apiService from "../services/ApiService"
 import "./PetriEditor.css"
 
 const PetriEditor = () => {
@@ -249,27 +249,40 @@ const PetriEditor = () => {
     [arcs, places, checkValidation],
   )
 
-  const playSimulation = useCallback(() => {
-    if (!simulationInterval) {
-      const interval = setInterval(() => {
-        const enabledTransitions = getEnabledTransitions()
-
-        if (enabledTransitions.length === 0) {
-          console.warn("[v0] No enabled transitions - stopping simulation (possible deadlock)")
-          clearInterval(interval)
-          setSimulationInterval(null)
-          return
-        }
-
-        // Randomly select an enabled transition to fire
-        const randomIndex = Math.floor(Math.random() * enabledTransitions.length)
-        const selectedTransition = enabledTransitions[randomIndex]
-
-        fireTransition(selectedTransition)
-      }, 1000)
-      setSimulationInterval(interval)
+  const pauseSimulation = useCallback(() => {
+    if (simulationInterval) {
+      clearInterval(simulationInterval)
+      setSimulationInterval(null)
+      console.log("[v0] Simulation paused")
     }
-  }, [simulationInterval, getEnabledTransitions, fireTransition])
+  }, [simulationInterval])
+
+  const playSimulation = useCallback(() => {
+    // Clear any existing interval first
+    if (simulationInterval) {
+      clearInterval(simulationInterval)
+    }
+
+    const interval = setInterval(() => {
+      const enabledTransitions = getEnabledTransitions()
+
+      if (enabledTransitions.length === 0) {
+        console.warn("[v0] No enabled transitions - stopping simulation (possible deadlock)")
+        clearInterval(interval)
+        setSimulationInterval(null)
+        return
+      }
+
+      // Randomly select an enabled transition to fire
+      const randomIndex = Math.floor(Math.random() * enabledTransitions.length)
+      const selectedTransition = enabledTransitions[randomIndex]
+
+      fireTransition(selectedTransition)
+    }, 1000)
+
+    setSimulationInterval(interval)
+    console.log("[v0] Simulation started")
+  }, [getEnabledTransitions, fireTransition, simulationInterval])
 
   const exportJSON = useCallback(async () => {
     const data = {
@@ -770,6 +783,15 @@ const PetriEditor = () => {
     checkValidation()
   }, [places, transitions, arcs, checkValidation])
 
+  useEffect(() => {
+    return () => {
+      if (simulationInterval) {
+        clearInterval(simulationInterval)
+        console.log("[v0] Cleaned up simulation interval on component unmount")
+      }
+    }
+  }, [simulationInterval])
+
   return (
     <div className="petri-editor">
       <ThemeSelector selectedTheme={selectedTheme} onThemeSelect={setSelectedTheme} onThemeLoad={handleThemeLoad} />
@@ -806,7 +828,7 @@ const PetriEditor = () => {
           </button>
           <SimulationControls
             onPlay={playSimulation}
-            onPause={() => setSimulationInterval(null)}
+            onPause={pauseSimulation}
             onStep={stepSimulation}
             isPlaying={!!simulationInterval}
           />
