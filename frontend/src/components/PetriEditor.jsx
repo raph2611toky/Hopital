@@ -282,15 +282,15 @@ const PetriEditor = () => {
       setSimulationInterval(null)
     }
 
-    const interval = setInterval(() => {
+    const runSimulationStep = async () => {
       const enabledTransitions = getEnabledTransitions()
 
       if (enabledTransitions.length === 0) {
         console.log("[v0] No enabled transitions - stopping simulation")
-        addNotification("Simulation terminée : aucune transition activable", "info")
-        clearInterval(interval)
+        addNotification("Simulation terminée : deadlock atteint", "info")
+        clearInterval(simulationInterval)
         setSimulationInterval(null)
-        setIsSimulating(false) // Added to stop simulation state
+        setIsSimulating(false)
         return
       }
 
@@ -298,13 +298,16 @@ const PetriEditor = () => {
       const randomIndex = Math.floor(Math.random() * enabledTransitions.length)
       const selectedTransition = enabledTransitions[randomIndex]
 
-      fireTransition(selectedTransition)
-    }, 1000)
+      console.log(`[v0] Auto-firing transition: ${selectedTransition.label}`)
+      await fireTransition(selectedTransition)
+    }
+
+    const interval = setInterval(runSimulationStep, 1500) // Slightly slower for better visibility
 
     setSimulationInterval(interval)
-    setIsSimulating(true) // Added to track simulation state
-    addNotification("Simulation démarrée", "info")
-    console.log("[v0] Simulation started")
+    setIsSimulating(true)
+    addNotification("Simulation automatique démarrée", "info")
+    console.log("[v0] Continuous simulation started - will run until deadlock")
   }, [getEnabledTransitions, fireTransition, simulationInterval, addNotification])
 
   const pauseSimulation = useCallback(() => {
@@ -549,9 +552,7 @@ const PetriEditor = () => {
 
         if (sourceType !== targetType) {
           const existingArc = arcs.find(
-            (arc) =>
-              (arc.source_id === connectingFrom.id_in_net && arc.target_id === targetElement.id_in_net) ||
-              (arc.source_id === targetElement.id_in_net && arc.target_id === connectingFrom.id_in_net),
+            (arc) => arc.source_id === connectingFrom.id_in_net && arc.target_id === targetElement.id_in_net,
           )
 
           if (!existingArc) {
@@ -568,9 +569,12 @@ const PetriEditor = () => {
             try {
               const createdArc = await apiService.createArc(newArc)
               setArcs((prev) => [...prev, createdArc])
+              console.log("[v0] Arc created successfully, cycles now allowed")
             } catch (err) {
               console.error("Erreur lors de la création de l'arc:", err)
             }
+          } else {
+            console.log("[v0] Arc already exists with same source and target")
           }
         }
       }
@@ -837,8 +841,8 @@ const PetriEditor = () => {
       const arc = arcs.find((a) => a.id === arcId)
       if (!arc) return false
 
-      const sourcePlace = places.find((p) => p.id_in_net === arc.source_id)
-      const targetTransition = transitions.find((t) => t.id_in_net === arc.target_id)
+      const sourcePlace = places.find((p) => p.id === arc.source)
+      const targetTransition = transitions.find((t) => t.id === arc.target)
 
       return sourcePlace && targetTransition
     },

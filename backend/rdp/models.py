@@ -87,9 +87,10 @@ class Transition(models.Model):
 
 class Arc(models.Model):
     petri_net = models.ForeignKey(PetriNet, on_delete=models.CASCADE, related_name='arcs')
-    id_in_net = models.CharField(max_length=50)  # ex: a123
-    source_id = models.CharField(max_length=50)  # id_in_net of Place or Transition
-    target_id = models.CharField(max_length=50)  # id_in_net of Place or Transition
+    id_in_net = models.CharField(max_length=50)
+    source_id = models.CharField(max_length=50)
+    target_id = models.CharField(max_length=50)
+    control_points = models.JSONField(null=True, blank=True)
     weight = models.IntegerField(default=1, validators=[MinValueValidator(1)])
     is_inhibitor = models.BooleanField(default=False)
     is_reset = models.BooleanField(default=False)

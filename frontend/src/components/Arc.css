@@ -16,6 +16,10 @@
   overflow: visible;
 }
 
+.arc-container:hover .arc-line {
+  transition: all 0.3s ease;
+}
+
 /* Amélioration des styles d'arcs pour les courbes */
 .arc-line {
   pointer-events: stroke;
@@ -36,6 +40,7 @@
   z-index: 1000;
 }
 
+/* Enhanced arc weight for curve creation */
 .arc-weight {
   position: absolute;
   width: 30px;
@@ -117,7 +122,7 @@
   text-align: center;
   pointer-events: all;
 }
-.menu-arc-item{
+.menu-arc-item {
   cursor: pointer;
 }
 
@@ -205,4 +210,21 @@
   width: 16px;
   height: 16px;
   font-size: 0.875rem;
+}
+
+/* Added styles for control points and curved arc interactions */
+.control-point {
+  pointer-events: all;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+}
+
+.control-point:hover {
+  r: 8;
+  opacity: 1;
+  cursor: grab;
+}
+
+.control-point:active {
+  cursor: grabbing;
 }
