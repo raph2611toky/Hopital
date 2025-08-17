@@ -842,9 +842,8 @@ const PetriEditor = () => {
     (arcId) => {
       const arc = arcs.find((a) => a.id === arcId)
       if (!arc) return false
-
-      const sourcePlace = places.find((p) => p.id === arc.source)
-      const targetTransition = transitions.find((t) => t.id === arc.target)
+      const sourcePlace = places.find((p) => p.id_in_net === arc.source_id)
+      const targetTransition = transitions.find((t) => t.id_in_net === arc.target_id)
 
       return sourcePlace && targetTransition
     },
@@ -1002,6 +1001,7 @@ const PetriEditor = () => {
                     }}
                     onArcDragStart={handleArcDragStart} // Added arc drag callbacks to prevent canvas movement during arc manipulation
                     onArcDragEnd={handleArcDragEnd}
+                    canBeInhibitor={()=> canBeInhibitor(arc.id)}
                   />
                 )
               }

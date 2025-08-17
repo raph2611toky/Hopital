@@ -16,6 +16,7 @@ const Arc = ({
   onDelete,
   onArcDragStart,
   onArcDragEnd,
+  canBeInhibitor
 }) => {
   const [isEditingWeight, setIsEditingWeight] = useState(false)
   const [tempWeight, setTempWeight] = useState(arc.weight)
@@ -388,9 +389,9 @@ const Arc = ({
     setTempWeight(arc.weight)
   }
 
-  const canBeInhibitor = () => {
-    return !(isSourceTransition && places.some((place) => place.id === target.id))
-  }
+  // const canBeInhibitor = () => {
+  //   return !(isSourceTransition && places.some((place) => place.id === target.id))
+  // }
 
   const handlePropertyUpdate = (property, value) => {
     if (onUpdate) {
@@ -402,6 +403,7 @@ const Arc = ({
     event.preventDefault()
     event.stopPropagation()
     if (onContextMenu) {
+      console.log(canBeInhibitor())
       onContextMenu(event, "arc", arc, {
         canBeInhibitor: canBeInhibitor(),
         currentDirection: arc.source_direction || "BAS",
