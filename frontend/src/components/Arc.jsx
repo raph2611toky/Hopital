@@ -282,27 +282,9 @@ const Arc = ({
     const x = event.clientX - rect.left
     const y = event.clientY - rect.top
 
-    const currentPoint = controlPoints[dragIndex]
-    if (currentPoint) {
-      const maxSpeed = 5 // Maximum pixels per frame
-      const dx = x - currentPoint.x
-      const dy = y - currentPoint.y
-      const distance = Math.sqrt(dx * dx + dy * dy)
-
-      if (distance > maxSpeed) {
-        const ratio = maxSpeed / distance
-        const newPosition = {
-          x: currentPoint.x + dx * ratio,
-          y: currentPoint.y + dy * ratio,
-        }
-        const adjustedPoints = adjustAdjacentPoints(dragIndex, newPosition)
-        setControlPoints(adjustedPoints)
-      } else {
-        const newPosition = { x, y }
-        const adjustedPoints = adjustAdjacentPoints(dragIndex, newPosition)
-        setControlPoints(adjustedPoints)
-      }
-    }
+    const newPosition = { x, y }
+    const adjustedPoints = adjustAdjacentPoints(dragIndex, newPosition)
+    setControlPoints(adjustedPoints)
   }
 
   const handleMouseUp = (event) => {
@@ -320,7 +302,12 @@ const Arc = ({
 
     setIsDragging(false)
     setDragIndex(-1)
-    setTimeout(() => setShowControlPoints(false), 2000)
+    setShowControlPoints(false)
+
+    // Deselect the arc after dragging to prevent it staying blue
+    if (onSelect) {
+      onSelect(null)
+    }
 
     if (onArcDragEnd) {
       onArcDragEnd()
@@ -471,7 +458,7 @@ const Arc = ({
   }
 
   const getSelectedColor = () => {
-    if (isDragging) return getArcColor() // Garder la couleur du type pendant le drag
+    if (isDragging) return getArcColor()
     return selected ? "#3b82f6" : getArcColor()
   }
 
