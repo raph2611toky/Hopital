@@ -153,13 +153,102 @@
 
 ---
 
-# 6) Démonstration type (7 minutes)
+### Construction du réseau de Petri pour le scénario 1
 
-1. **Vue “global”** : graphe coloré par sous-réseau (Consult/Maternité/Chirurgie).
-2. **Mode “Jour” → “Nuit”** : on voit bouger les jetons de disponibilités.
-3. **Urgence maternité** : file d’urgence prioritaire ; salles limitées à 3.
-4. **Bloc op. saturé** : chirurgiens réalloués, files consult augmentent.
-5. **Contrôle stagiaires** : compteur 12h empêche une 2e garde sans reset.
-6. **KPIs** : temps d’attente, occupations, débit de sortie.
+Nous allons construire un réseau de Petri basé sur votre scénario hospitalier avec les éléments spécifiés : P1, P2, P3, P4, P5, et les transitions T1, T2, T3. Voici une description détaillée du réseau, y compris les équivalences, directions, poids des arcs, et une explication.
+
+#### Éléments du réseau
+- **Places** :
+  - **P1 : File d'attente** (5 jetons initiaux) : Représente les patients attendant l'admission.
+  - **P2 : Patients admis** (capacité 3, 0 jeton initial) : Représente les patients en cours de traitement, limitée à 3 pour simuler une capacité d'accueil.
+  - **P3 : Lits disponibles** (3 jetons initiaux) : Représente les lits libres dans l'hôpital.
+  - **P4 : Patients sortis** (0 jeton initial) : Représente les patients ayant terminé leur traitement.
+  - **P5 : Nouveaux patients** (0 jeton initial) : Représente l'arrivée de nouveaux patients pour réapprovisionner P1.
+
+- **Transitions** :
+  - **T1 : Admission** : Déplace un patient de P1 à P2 si un lit est disponible (P3).
+  - **T2 : Traitement et sortie** : Déplace un patient de P2 à P4 et libère un lit dans P3.
+  - **T3 : Arrivée de nouveaux patients** : Ajoute un nouveau patient à P1 toutes les 5 secondes (lié à P5).
+
+#### Connexions et arcs
+- **Arcs entrants et sortants** :
+  - **P1 → T1** : Poids = 1 (1 patient requis pour l'admission).
+  - **P3 → T1** : Poids = 1 (1 lit requis pour l'admission).
+  - **T1 → P2** : Poids = 1 (1 patient admis).
+  - **T1 → P3** : Poids = -1 (1 lit consommé, mais reste géré par la logique pour éviter une diminution réelle).
+  - **P2 → T2** : Poids = 1 (1 patient en traitement requis).
+  - **T2 → P4** : Poids = 1 (1 patient sorti).
+  - **T2 → P3** : Poids = 1 (1 lit libéré).
+  - **P5 → T3** : Poids = 1 (1 nouveau patient disponible).
+  - **T3 → P1** : Poids = 1 (1 patient ajouté à la file d'attente).
+
+- **Optionnel : Arc inhibiteur** :
+  - Pour ajouter une contrainte (ex. : bloquer T1 si P2 est plein), vous pouvez ajouter un arc inhibiteur **P2 → T1** avec `is_inhibitor=true`. Cela empêchera une nouvelle admission si P2 a 3 jetons.
+
+#### Explication du flux
+- **Début** : P1 a 5 jetons, P3 a 3 jetons, P2 et P4 sont vides. P5 commence à 0 mais sera utilisé par T3.
+- **T1 (Admission)** : Tant que P1 ≥ 1 et P3 ≥ 1, T1 peut être tirée, déplaçant 1 jeton de P1 à P2 et "consommant" 1 lit (logiquement, P3 reste à 3 jusqu'à T2). P2 est limité à 3, donc T1 s'arrête si P2 atteint sa capacité.
+- **T2 (Traitement et sortie)** : Quand P2 ≥ 1, T2 peut être tirée, déplaçant 1 jeton de P2 à P4 et ajoutant 1 jeton à P3 (libérant un lit).
+- **T3 (Arrivée)** : Toutes les 5 secondes, T3 tire automatiquement (si implémenté), prenant 1 jeton de P5 (qui doit être réapprovisionné, par exemple via une logique externe) et ajoutant 1 jeton à P1. Si P5 reste à 0 sans réapprovisionnement, T3 ne fonctionnera pas sauf si vous simulez une arrivée continue.
+
+#### Équivalences et directions
+- **P1 (File d'attente)** équivaut à l'état initial des patients en attente.
+- **P2 (Patients admis)** équivaut à l'état des patients en traitement, avec une limite physique.
+- **P3 (Lits disponibles)** équivaut à une ressource partagée, diminuant logiquement avec T1 et augmentant avec T2.
+- **P4 (Patients sortis)** équivaut à l'état final des patients traités.
+- **P5 (Nouveaux patients)** équivaut à une source externe de patients, activée par T3.
+- **T1** dirige le flux de P1 et P3 vers P2, modélisant l'admission.
+- **T2** dirige le flux de P2 vers P4 et P3, modélisant la sortie et la libération des lits.
+- **T3** dirige le flux de P5 vers P1, simulant l'arrivée continue.
+
+#### Poids des arcs
+- P1 → T1 : 1
+- P3 → T1 : 1
+- T1 → P2 : 1
+- T1 → P3 : -1 (logique, pas une diminution réelle)
+- P2 → T2 : 1
+- T2 → P4 : 1
+- T2 → P3 : 1
+- P5 → T3 : 1
+- T3 → P1 : 1
+
+#### Implémentation dans votre système
+- Dans `PetriEditor.jsx`, configurez les places avec leurs jetons initiaux et capacités via `addPlace` ou `handleThemeLoad`.
+- Ajoutez les transitions avec `addTransition` et connectez-les via le mode connexion pour créer les arcs avec les poids spécifiés.
+- Implémentez T3 avec une logique dans `playSimulation` : toutes les 5 secondes, vérifiez si P5 a un jeton (ou simulez-en un), tirez T3, et mettez à jour P1.
+
+---
+
+### Scénario étendu (autre possibilité)
+
+Pour enrichir le réseau, ajoutons un scénario plus complexe avec une gestion des urgences :
+- **P6 : Urgences** (0 jeton initial, capacité 2) : Patients en urgence.
+- **T4 : Traitement urgence** : Déplace un patient de P6 à P4, prioritaire sur T2.
+- **Arcs** :
+  - P1 → T4 : Poids = 1 (patient urgent de la file).
+  - T4 → P6 : Poids = 1 (patient en urgence).
+  - P6 → T4 : Poids = 1 (patient en traitement urgence).
+  - T4 → P4 : Poids = 1 (patient sorti après urgence).
+
+- **Règle** : Ajoutez un arc inhibiteur **P6 → T1** (`is_inhibitor=true`) pour bloquer les admissions normales si une urgence est en cours (P6 ≥ 1).
+- **Flux** : Si un jeton est dirigé vers P6 (via une logique externe ou T4), T1 est bloquée jusqu'à ce que P6 soit vide.
+
+#### Équivalences et directions
+- **P6** équivaut à l'état des urgences en cours.
+- **T4** dirige le flux de P1 vers P6, puis P6 vers P4, avec priorité.
+
+#### Poids des arcs supplémentaires
+- P1 → T4 : 1
+- T4 → P6 : 1
+- P6 → T4 : 1
+- T4 → P4 : 1
+- P6 → T1 : 0 (inhibiteur, pas de poids).
+
+---
+
+### Explication supplémentaire
+- **Dynamique** : Le réseau simule un hôpital où les patients arrivent (P1), sont admis (P2) si des lits (P3) sont disponibles, traités et sortis (P4), avec des arrivées continues (P5, T3) et une gestion des urgences (P6, T4). L'arc inhibiteur sur T1 protège contre la surcharge en cas d'urgence.
+- **Blocage** : Sans P5 ou T3, P1 s'épuise, arrêtant T1. Avec P6 plein et l'inhibiteur, T1 est bloquée jusqu'à résolution.
+- **Visualisation** : Dans `Place.jsx`, animez les jetons de P1 à P2 avec un effet de déplacement. Dans `Transition.jsx`, surlignez T1 et T4 quand activés (`.enabled`). Dans `Arc.jsx`, animez les arcs avec `stroke-dashoffset`.
 
 ---

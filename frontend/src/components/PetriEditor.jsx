@@ -22,6 +22,7 @@ const PetriEditor = () => {
   const [selected, setSelected] = useState(null)
   const [simulationInterval, setSimulationInterval] = useState(null)
   const [contextMenu, setContextMenu] = useState({ x: 0, y: 0, visible: false, type: null })
+  const [isSimulating, setIsSimulating] = useState(false) // Added to track simulation state
 
   const [selectedTheme, setSelectedTheme] = useState(null)
   const [themeData, setThemeData] = useState(null)
@@ -43,6 +44,10 @@ const PetriEditor = () => {
   const [draggedElement, setDraggedElement] = useState(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [originalPosition, setOriginalPosition] = useState(null)
+
+  const [firingTransitionId, setFiringTransitionId] = useState(null)
+  const [firingArcs, setFiringArcs] = useState([])
+  const [notifications, setNotifications] = useState([])
 
   const handleThemeLoad = useCallback((loadedThemeData) => {
     console.log("[v0] Loading theme data:", loadedThemeData)
@@ -182,12 +187,28 @@ const PetriEditor = () => {
     })
   }, [arcs, places, transitions])
 
+  const addNotification = useCallback((message, type = "info") => {
+    const id = Date.now()
+    const notification = { id, message, type }
+    setNotifications((prev) => [...prev, notification])
+
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== id))
+    }, 3000)
+  }, [])
+
   const fireTransition = useCallback(
     async (transition) => {
       const inputArcs = arcs.filter((arc) => arc.target_id === transition.id_in_net)
       const outputArcs = arcs.filter((arc) => arc.source_id === transition.id_in_net)
 
       console.log(`[v0] Firing transition: ${transition.label}`)
+
+      setFiringTransitionId(transition.id)
+      setFiringArcs([...inputArcs.map((a) => a.id), ...outputArcs.map((a) => a.id)])
+
+      addNotification(`Transition ${transition.label} déclenchée`, "success")
 
       // Update places based on arc effects
       const updatedPlaces = [...places]
@@ -244,32 +265,32 @@ const PetriEditor = () => {
         }
       }
 
+      setTimeout(() => {
+        setFiringTransitionId(null)
+        setFiringArcs([])
+      }, 500)
+
       checkValidation()
     },
-    [arcs, places, checkValidation],
+    [arcs, places, checkValidation, addNotification],
   )
-
-  const pauseSimulation = useCallback(() => {
-    if (simulationInterval) {
-      clearInterval(simulationInterval)
-      setSimulationInterval(null)
-      console.log("[v0] Simulation paused")
-    }
-  }, [simulationInterval])
 
   const playSimulation = useCallback(() => {
     // Clear any existing interval first
     if (simulationInterval) {
       clearInterval(simulationInterval)
+      setSimulationInterval(null)
     }
 
     const interval = setInterval(() => {
       const enabledTransitions = getEnabledTransitions()
 
       if (enabledTransitions.length === 0) {
-        console.warn("[v0] No enabled transitions - stopping simulation (possible deadlock)")
+        console.log("[v0] No enabled transitions - stopping simulation")
+        addNotification("Simulation terminée : aucune transition activable", "info")
         clearInterval(interval)
         setSimulationInterval(null)
+        setIsSimulating(false) // Added to stop simulation state
         return
       }
 
@@ -281,8 +302,34 @@ const PetriEditor = () => {
     }, 1000)
 
     setSimulationInterval(interval)
+    setIsSimulating(true) // Added to track simulation state
+    addNotification("Simulation démarrée", "info")
     console.log("[v0] Simulation started")
-  }, [getEnabledTransitions, fireTransition, simulationInterval])
+  }, [getEnabledTransitions, fireTransition, simulationInterval, addNotification])
+
+  const pauseSimulation = useCallback(() => {
+    if (simulationInterval) {
+      clearInterval(simulationInterval)
+      setSimulationInterval(null)
+    }
+    setIsSimulating(false)
+    addNotification("Simulation en pause", "info")
+    console.log("[v0] Simulation paused")
+  }, [simulationInterval, addNotification])
+
+  const stepSimulation = useCallback(() => {
+    const enabledTransitions = getEnabledTransitions()
+
+    if (enabledTransitions.length === 0) {
+      console.warn("[v0] No enabled transitions available for step")
+      addNotification("Aucune transition activée disponible", "warning")
+      return
+    }
+
+    // Fire the first enabled transition (or could be random)
+    const transitionToFire = enabledTransitions[0]
+    fireTransition(transitionToFire)
+  }, [getEnabledTransitions, fireTransition, addNotification])
 
   const exportJSON = useCallback(async () => {
     const data = {
@@ -583,20 +630,6 @@ const PetriEditor = () => {
     setContextMenu((prev) => ({ ...prev, visible: false }))
   }, [])
 
-  const stepSimulation = useCallback(() => {
-    const enabledTransitions = getEnabledTransitions()
-
-    if (enabledTransitions.length === 0) {
-      console.warn("[v0] No enabled transitions available for step")
-      alert("Aucune transition activée disponible")
-      return
-    }
-
-    // Fire the first enabled transition (or could be random)
-    const transitionToFire = enabledTransitions[0]
-    fireTransition(transitionToFire)
-  }, [getEnabledTransitions, fireTransition])
-
   const addPlace = useCallback(
     async (position) => {
       const newPlace = {
@@ -794,6 +827,14 @@ const PetriEditor = () => {
 
   return (
     <div className="petri-editor">
+      <div className="notifications">
+        {notifications.map((notification) => (
+          <div key={notification.id} className={`notification notification-${notification.type}`}>
+            {notification.message}
+          </div>
+        ))}
+      </div>
+
       <ThemeSelector selectedTheme={selectedTheme} onThemeSelect={setSelectedTheme} onThemeLoad={handleThemeLoad} />
 
       <NetworkManager
@@ -830,7 +871,7 @@ const PetriEditor = () => {
             onPlay={playSimulation}
             onPause={pauseSimulation}
             onStep={stepSimulation}
-            isPlaying={!!simulationInterval}
+            isPlaying={isSimulating}
           />
         </div>
       </div>
@@ -852,6 +893,7 @@ const PetriEditor = () => {
             style={{
               transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
               transformOrigin: "0 0",
+              transition: "transform 0.2s ease", // Add smooth transform transitions
             }}
           >
             <div className="grid-background" />
@@ -885,6 +927,13 @@ const PetriEditor = () => {
                     }}
                     onUpdate={updateElement}
                     selected={selected?.id === arc.id}
+                    isFiring={firingArcs.includes(arc.id)}
+                    onDelete={() => {
+                      const element = arc;
+                      if (element) {
+                        deleteElement(element.id, "arc")
+                      }
+                    }}
                   />
                 )
               }
@@ -908,33 +957,53 @@ const PetriEditor = () => {
               </svg>
             )}
 
-            {filteredPlaces.map((place) => (
-              <Place
-                key={place.id}
-                place={place}
-                onLeftMouseDown={(event) => startElementLeftClick(place, event)}
-                onLeftMouseUp={() => handleElementLeftUp(place)}
-                onRightClick={(event) => handleElementRightClick(place, event)}
-                onLeftClick={() => handleElementLeftClick(place)}
-                selected={selected?.id === place.id}
-                isConnecting={isConnecting}
-                isDragged={draggedElement?.id === place.id}
-              />
-            ))}
+            {filteredPlaces.map((place) => {
+              const enabledTransitions = getEnabledTransitions()
+              const isInvolvedInTransition = enabledTransitions.some((t) =>
+                arcs.some(
+                  (arc) =>
+                    (arc.source_id === place.id_in_net && arc.target_id === t.id_in_net) ||
+                    (arc.source_id === t.id_in_net && arc.target_id === place.id_in_net),
+                ),
+              )
 
-            {filteredTransitions.map((transition) => (
-              <Transition
-                key={transition.id}
-                transition={transition}
-                onLeftMouseDown={(event) => startElementLeftClick(transition, event)}
-                onLeftMouseUp={() => handleElementLeftUp(transition)}
-                onRightClick={(event) => handleElementRightClick(transition, event)}
-                onLeftClick={() => handleElementLeftClick(transition)}
-                selected={selected?.id === transition.id}
-                isConnecting={isConnecting}
-                isDragged={draggedElement?.id === transition.id}
-              />
-            ))}
+              return (
+                <Place
+                  key={place.id}
+                  place={place}
+                  onLeftMouseDown={(event) => startElementLeftClick(place, event)}
+                  onLeftMouseUp={() => handleElementLeftUp(place)}
+                  onRightClick={(event) => handleElementRightClick(place, event)}
+                  onLeftClick={() => handleElementLeftClick(place)}
+                  selected={selected?.id === place.id}
+                  isConnecting={isConnecting}
+                  isDragged={draggedElement?.id === place.id}
+                  isActive={isInvolvedInTransition} // Pass active state
+                  isFull={place.capacity && place.tokens >= place.capacity} // Pass full state
+                />
+              )
+            })}
+
+            {filteredTransitions.map((transition) => {
+              const enabledTransitions = getEnabledTransitions()
+              const isEnabled = enabledTransitions.some((t) => t.id === transition.id)
+
+              return (
+                <Transition
+                  key={transition.id}
+                  transition={transition}
+                  onLeftMouseDown={(event) => startElementLeftClick(transition, event)}
+                  onLeftMouseUp={() => handleElementLeftUp(transition)}
+                  onRightClick={(event) => handleElementRightClick(transition, event)}
+                  onLeftClick={() => handleElementLeftClick(transition)}
+                  selected={selected?.id === transition.id}
+                  isConnecting={isConnecting}
+                  isDragged={draggedElement?.id === transition.id}
+                  isEnabled={isEnabled} // Pass enabled state
+                  isFiring={firingTransitionId === transition.id} // Pass firing state
+                />
+              )
+            })}
           </div>
         </div>
 
@@ -947,6 +1016,7 @@ const PetriEditor = () => {
               setSelected(null)
             }}
             onDuplicate={duplicateElement}
+            validation={validation} // Pass validation state to properties panel
           />
         </div>
       </div>

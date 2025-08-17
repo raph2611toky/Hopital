@@ -1,9 +1,9 @@
 .place {
   position: absolute;
-  width: 66px; /* Increased to accommodate 3px margin */
-  height: 66px; /* Increased to accommodate 3px margin */
+  width: 60px;
+  height: 60px;
   user-select: none;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
 .place-circle {
@@ -17,8 +17,7 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s ease;
-  margin: 3px; /* Added 3px margin for better arrow visibility */
+  transition: all 0.3s ease;
 }
 
 .place:hover .place-circle {
@@ -47,9 +46,53 @@
   transform: scale(1.1);
 }
 
+/* Added dynamic color states for places based on token status */
+.place.empty .place-circle {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.place.has-tokens .place-circle {
+  background: #ecfdf5;
+  border-color: #10b981;
+}
+
+.place.full .place-circle {
+  background: #fef2f2;
+  border-color: #ef4444;
+  animation: pulse-red 2s infinite;
+}
+
+.place.active .place-circle {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+  animation: pulse-blue 1.5s infinite;
+}
+
+/* Added keyframe animations for visual feedback */
+@keyframes pulse-red {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
+  }
+}
+
+@keyframes pulse-blue {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+  }
+}
+
 .place-label {
   position: absolute;
-  top: 73px; /* Adjusted for new container size */
+  top: 70px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 12px;
@@ -62,7 +105,7 @@
   border: 1px solid #e5e7eb;
 }
 
-/* Amélioration des jetons avec support des couleurs personnalisées */
+/* Enhanced token animations with smooth transitions */
 .token {
   position: absolute;
   width: 6px;
@@ -71,7 +114,19 @@
   border-radius: 50%;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  transition: background-color 0.2s ease;
+  transition: all 0.3s ease;
+  animation: token-appear 0.3s ease-out;
+}
+
+@keyframes token-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .token.center {
@@ -94,6 +149,7 @@
   min-width: 14px;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  animation: token-appear 0.3s ease-out;
 }
 
 .token-count {

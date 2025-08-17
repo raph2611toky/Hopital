@@ -12,6 +12,8 @@ const Transition = ({
   selected,
   isConnecting,
   isDragged,
+  isEnabled, // New prop for enabled state
+  isFiring, // New prop for firing animation
 }) => {
   const transitionRef = useRef(null)
 
@@ -47,10 +49,19 @@ const Transition = ({
   const offsetX = isLandscape ? 28 : 18 // Half of 56px (landscape) or 36px (portrait)
   const offsetY = isLandscape ? 18 : 28 // Half of 36px (landscape) or 56px (portrait)
 
+  const getTransitionClasses = () => {
+    let classes = `transition petri-element ${selected ? "selected" : ""} ${isConnecting ? "connecting" : ""} ${isDragged ? "dragged" : ""} ${isLandscape ? "landscape" : "portrait"}`
+
+    if (isEnabled) classes += " enabled"
+    if (isFiring) classes += " firing"
+
+    return classes
+  }
+
   return (
     <div
       ref={transitionRef}
-      className={`transition petri-element ${selected ? "selected" : ""} ${isConnecting ? "connecting" : ""} ${isDragged ? "dragged" : ""} ${isLandscape ? "landscape" : "portrait"}`}
+      className={getTransitionClasses()}
       style={{
         left: transition.position.x - offsetX,
         top: transition.position.y - offsetY,

@@ -47,7 +47,7 @@ const ContextMenu = ({
         )}
 
         
-
+{/* 
         {type === "arc" && element && (
           <>
             <div className="context-menu-header">Arc (Poids: {element.weight})</div>
@@ -56,7 +56,7 @@ const ContextMenu = ({
               Supprimer
             </button>
           </>
-        )}
+        )} */}
       </div>
     </>
   )

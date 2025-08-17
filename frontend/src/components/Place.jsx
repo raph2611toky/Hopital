@@ -12,6 +12,8 @@ const Place = ({
   selected,
   isConnecting,
   isDragged,
+  isActive, // New prop for active state
+  isFull, // New prop for full state
 }) => {
   const placeRef = useRef(null)
 
@@ -51,7 +53,7 @@ const Place = ({
     if (tokenCount === 0) return null
 
     const tokens = []
-    const tokenColor = place.tokenColor || "#000000"
+    const tokenColor = place.token_color || place.tokenColor || "#000000"
 
     if (visibleTokens === 1) {
       tokens.push(
@@ -170,10 +172,21 @@ const Place = ({
     return tokens
   }
 
+  const getPlaceClasses = () => {
+    let classes = `place petri-element ${selected ? "selected" : ""} ${isConnecting ? "connecting" : ""} ${isDragged ? "dragged" : ""}`
+
+    if (isActive) classes += " active"
+    if (isFull) classes += " full"
+    if (place.tokens === 0) classes += " empty"
+    if (place.tokens > 0 && !isFull) classes += " has-tokens"
+
+    return classes
+  }
+
   return (
     <div
       ref={placeRef}
-      className={`place petri-element ${selected ? "selected" : ""} ${isConnecting ? "connecting" : ""} ${isDragged ? "dragged" : ""}`}
+      className={getPlaceClasses()}
       style={{
         left: place.position.x - 33,
         top: place.position.y - 33,
