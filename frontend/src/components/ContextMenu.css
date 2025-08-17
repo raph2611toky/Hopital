@@ -75,7 +75,24 @@
   background: #fef2f2;
 }
 
+/* Added disabled state styling for arc menu items */
+.context-menu-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.context-menu-item.disabled:hover {
+  background: none;
+}
+
 .context-menu-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 0.25rem 0;
+}
+
+/* Renamed menu-divider to context-menu-divider for consistency */
+.menu-divider {
   height: 1px;
   background: #e5e7eb;
   margin: 0.25rem 0;

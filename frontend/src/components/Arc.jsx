@@ -6,8 +6,6 @@ import "./Arc.css"
 const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu, selected, onUpdate, onDelete }) => {
   const [isEditingWeight, setIsEditingWeight] = useState(false)
   const [tempWeight, setTempWeight] = useState(arc.weight)
-  const [showPropertiesMenu, setShowPropertiesMenu] = useState(false)
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 })
 
   // Mettre à jour tempWeight seulement si arc.weight change depuis l'extérieur
   useEffect(() => {
@@ -162,31 +160,25 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
     if (onUpdate) {
       onUpdate(arc.id, { [property]: value })
     }
-    setShowPropertiesMenu(false)
   }
 
   const handleContextMenu = (event) => {
     event.preventDefault()
     event.stopPropagation()
-    setMenuPosition({ x: event.clientX, y: event.clientY })
-    setShowPropertiesMenu(true)
     if (onContextMenu) {
-      onContextMenu(event)
+      onContextMenu(event, "arc", arc, { canBeInhibitor: canBeInhibitor() })
     }
   }
 
   useEffect(() => {
     const handleOutsideClick = (event) => {
-      if (showPropertiesMenu && !event.target.closest(".arc-properties-menu")) {
-        setShowPropertiesMenu(false)
-      }
       if (isEditingWeight && !event.target.closest(".weight-form-container")) {
         setIsEditingWeight(false)
       }
     }
     document.addEventListener("mousedown", handleOutsideClick)
     return () => document.removeEventListener("mousedown", handleOutsideClick)
-  }, [isEditingWeight, showPropertiesMenu])
+  }, [isEditingWeight])
 
   return (
     <div className="arc-container">
@@ -226,39 +218,6 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
           }}
         />
       </svg>
-
-      {showPropertiesMenu && (
-        <div
-          className="arc-properties-menu"
-          style={{
-            position: "fixed",
-            left: menuPosition.x,
-            top: menuPosition.y,
-            zIndex: 1000,
-          }}
-        >
-          <div className="menu-item" onClick={() => setIsEditingWeight(true)}>
-            Modifier le poids ({arc.weight})
-          </div>
-          <div className="menu-divider"></div>
-          <div
-            className={`menu-arc-item ${!canBeInhibitor() ? "disabled" : ""}`}
-            onClick={() => canBeInhibitor() && handlePropertyUpdate("is_inhibitor", !arc.is_inhibitor)}
-            title={!canBeInhibitor() ? "Un arc Transition → Place ne peut pas être inhibiteur" : ""}
-          >
-            {arc.is_inhibitor ? "✓" : ""} Arc inhibiteur
-          </div>
-          <div className="menu-arc-item" onClick={() => handlePropertyUpdate("is_reset", !arc.is_reset)}>
-            {arc.is_reset ? "✓" : ""} Arc de remise à zéro
-          </div>
-          <div className="menu-arc-item" onClick={onDelete}>
-            <button className="context-menu-item danger" onClick={onDelete}>
-              <span className="menu-icon">🗑</span>
-              Supprimer
-            </button>
-          </div>
-        </div>
-      )}
 
       <div
         className={`arc-weight ${selected ? "selected" : ""}`}

@@ -793,6 +793,58 @@ const PetriEditor = () => {
     [currentLayer],
   )
 
+  const handleEditWeight = useCallback(
+    async (arcId, newWeight) => {
+      try {
+        await updateElement(arcId, { weight: Number.parseInt(newWeight) || 1 })
+      } catch (err) {
+        console.error("Erreur lors de la modification du poids:", err)
+      }
+    },
+    [updateElement],
+  )
+
+  const handleToggleInhibitor = useCallback(
+    async (arcId) => {
+      const arc = arcs.find((a) => a.id === arcId)
+      if (arc) {
+        try {
+          await updateElement(arcId, { is_inhibitor: !arc.is_inhibitor })
+        } catch (err) {
+          console.error("Erreur lors du basculement inhibiteur:", err)
+        }
+      }
+    },
+    [arcs, updateElement],
+  )
+
+  const handleToggleReset = useCallback(
+    async (arcId) => {
+      const arc = arcs.find((a) => a.id === arcId)
+      if (arc) {
+        try {
+          await updateElement(arcId, { is_reset: !arc.is_reset })
+        } catch (err) {
+          console.error("Erreur lors du basculement reset:", err)
+        }
+      }
+    },
+    [arcs, updateElement],
+  )
+
+  const canBeInhibitor = useCallback(
+    (arcId) => {
+      const arc = arcs.find((a) => a.id === arcId)
+      if (!arc) return false
+
+      const sourcePlace = places.find((p) => p.id_in_net === arc.source_id)
+      const targetTransition = transitions.find((t) => t.id_in_net === arc.target_id)
+
+      return sourcePlace && targetTransition
+    },
+    [arcs, places, transitions],
+  )
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas) {
@@ -929,7 +981,7 @@ const PetriEditor = () => {
                     selected={selected?.id === arc.id}
                     isFiring={firingArcs.includes(arc.id)}
                     onDelete={() => {
-                      const element = arc;
+                      const element = arc
                       if (element) {
                         deleteElement(element.id, "arc")
                       }
@@ -1022,11 +1074,7 @@ const PetriEditor = () => {
       </div>
 
       <ContextMenu
-        visible={contextMenu.visible}
-        x={contextMenu.x}
-        y={contextMenu.y}
-        type={contextMenu.type}
-        element={contextMenu.element}
+        {...contextMenu}
         onClose={closeContextMenu}
         onAddPlace={() => addPlace(contextMenu.position)}
         onAddTransition={() => addTransition(contextMenu.position)}
@@ -1043,6 +1091,10 @@ const PetriEditor = () => {
             duplicateElement(element.id, type)
           }
         }}
+        onEditWeight={handleEditWeight}
+        onToggleInhibitor={handleToggleInhibitor}
+        onToggleReset={handleToggleReset}
+        canBeInhibitor={canBeInhibitor}
       />
     </div>
   )

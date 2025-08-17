@@ -13,11 +13,20 @@ const ContextMenu = ({
   onDelete,
   onAddTokens,
   onRemoveTokens,
+  onEditWeight,
+  onToggleInhibitor,
+  onToggleReset,
+  canBeInhibitor,
 }) => {
   if (!visible) return null
 
   const handleAction = (action) => {
     action()
+    onClose()
+  }
+
+  const handleArcAction = (action, arcId) => {
+    action(arcId)
     onClose()
   }
 
@@ -46,17 +55,33 @@ const ContextMenu = ({
           </>
         )}
 
-        
-{/* 
         {type === "arc" && element && (
           <>
             <div className="context-menu-header">Arc (Poids: {element.weight})</div>
+            <button className="context-menu-item" onClick={() => handleArcAction(onEditWeight, element.id)}>
+              <span className="menu-icon">✏️</span>
+              Modifier le poids ({element.weight})
+            </button>
+            <div className="menu-divider"></div>
+            <button
+              className={`context-menu-item ${!canBeInhibitor(element.id) ? "disabled" : ""}`}
+              onClick={() => canBeInhibitor(element.id) && handleArcAction(onToggleInhibitor, element.id)}
+              title={!canBeInhibitor(element.id) ? "Un arc Transition → Place ne peut pas être inhibiteur" : ""}
+            >
+              <span className="menu-icon">{element.is_inhibitor ? "✓" : "○"}</span>
+              Arc inhibiteur
+            </button>
+            <button className="context-menu-item" onClick={() => handleArcAction(onToggleReset, element.id)}>
+              <span className="menu-icon">{element.is_reset ? "✓" : "○"}</span>
+              Arc de remise à zéro
+            </button>
+            <div className="menu-divider"></div>
             <button className="context-menu-item danger" onClick={() => handleAction(onDelete)}>
               <span className="menu-icon">🗑</span>
               Supprimer
             </button>
           </>
-        )} */}
+        )}
       </div>
     </>
   )

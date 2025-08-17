@@ -103,16 +103,22 @@
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
   padding: 8px 0;
   min-width: 200px;
-  z-index: 1000;
+  z-index: 1001;
+  pointer-events: all;
 }
 
-.menu-item,.menu-arc-item {
+.menu-item,
+.menu-arc-item {
   padding: 8px 16px;
   cursor: pointer;
   font-size: 14px;
   color: #374151;
   transition: background-color 0.2s ease;
   text-align: center;
+  pointer-events: all;
+}
+.menu-arc-item{
+  cursor: pointer;
 }
 
 .menu-item:hover {
@@ -121,13 +127,15 @@
   border-radius: 10px;
 }
 
-.menu-item.disabled, .menu-arc-item.disabled {
+.menu-item.disabled,
+.menu-arc-item.disabled {
   color: #9ca3af;
   cursor: not-allowed;
   opacity: 0.6;
 }
 
-.menu-item.disabled:hover, .menu-arc-item.disabled:hover {
+.menu-item.disabled:hover,
+.menu-arc-item.disabled:hover {
   background-color: transparent;
 }
 
