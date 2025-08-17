@@ -49,6 +49,8 @@ const PetriEditor = () => {
   const [firingArcs, setFiringArcs] = useState([])
   const [notifications, setNotifications] = useState([])
 
+  const [isArcDragging, setIsArcDragging] = useState(false) // Added state to track when an arc is being dragged
+
   const handleThemeLoad = useCallback((loadedThemeData) => {
     console.log("[v0] Loading theme data:", loadedThemeData)
     setThemeData(loadedThemeData)
@@ -453,12 +455,12 @@ const PetriEditor = () => {
 
   const handleMouseDown = useCallback(
     (event) => {
-      if (event.button === 0 && !event.target.closest(".petri-element")) {
+      if (event.button === 0 && !event.target.closest(".petri-element") && !isArcDragging) {
         setIsDragging(true)
         setDragStart({ x: event.clientX - transform.x, y: event.clientY - transform.y })
       }
     },
-    [transform],
+    [transform, isArcDragging],
   )
 
   const handleMouseMove = useCallback(
@@ -469,7 +471,7 @@ const PetriEditor = () => {
 
       setMousePosition({ x, y })
 
-      if (isDragging) {
+      if (isDragging && !isArcDragging) {
         setTransform((prev) => ({
           ...prev,
           x: event.clientX - dragStart.x,
@@ -493,7 +495,7 @@ const PetriEditor = () => {
         })
       }
     },
-    [isDragging, dragStart, isConnecting, connectingFrom, transform, draggedElement, dragOffset],
+    [isDragging, dragStart, isConnecting, connectingFrom, transform, draggedElement, dragOffset, isArcDragging],
   )
 
   const handleMouseUp = useCallback(async () => {
@@ -849,6 +851,14 @@ const PetriEditor = () => {
     [arcs, places, transitions],
   )
 
+  const handleArcDragStart = useCallback(() => {
+    setIsArcDragging(true)
+  }, [])
+
+  const handleArcDragEnd = useCallback(() => {
+    setIsArcDragging(false)
+  }, [])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas) {
@@ -990,6 +1000,8 @@ const PetriEditor = () => {
                         deleteElement(element.id, "arc")
                       }
                     }}
+                    onArcDragStart={handleArcDragStart} // Added arc drag callbacks to prevent canvas movement during arc manipulation
+                    onArcDragEnd={handleArcDragEnd}
                   />
                 )
               }

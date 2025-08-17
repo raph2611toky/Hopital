@@ -3,7 +3,20 @@
 import { useState, useEffect, useRef } from "react"
 import "./Arc.css"
 
-const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu, selected, onUpdate, onDelete }) => {
+const Arc = ({
+  arc,
+  source,
+  target,
+  places,
+  transitions,
+  onSelect,
+  onContextMenu,
+  selected,
+  onUpdate,
+  onDelete,
+  onArcDragStart,
+  onArcDragEnd,
+}) => {
   const [isEditingWeight, setIsEditingWeight] = useState(false)
   const [tempWeight, setTempWeight] = useState(arc.weight)
   const [controlPoints, setControlPoints] = useState(arc.control_points || [])
@@ -11,8 +24,8 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
   const [dragIndex, setDragIndex] = useState(-1)
   const [showControlPoints, setShowControlPoints] = useState(false)
   const svgRef = useRef(null)
+  const arcDragId = useRef(`arc-${arc.id}-${Date.now()}`)
 
-  // Mettre à jour tempWeight seulement si arc.weight change depuis l'extérieur
   useEffect(() => {
     setTempWeight(arc.weight)
   }, [arc.weight])
@@ -36,7 +49,6 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
     const unitX = distance > 0 ? dx / distance : 0
     const unitY = distance > 0 ? dy / distance : 0
 
-    // Ajuster départ
     if (isSourcePlace) {
       const radius = 30
       start = {
@@ -61,7 +73,6 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
       }
     }
 
-    // Ajuster arrivée
     if (isTargetPlace) {
       const radius = 30
       end = {
@@ -75,7 +86,6 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
       let midPoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
 
       if (controlPoints.length === 1) {
-        // Quadratic curve with one control point
         const cp = controlPoints[0]
         path += ` Q ${cp.x} ${cp.y}, ${end.x} ${end.y}`
         midPoint = {
@@ -83,7 +93,6 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
           y: 0.25 * start.y + 0.5 * cp.y + 0.25 * end.y,
         }
       } else if (controlPoints.length === 2) {
-        // Cubic curve with two control points
         const cp1 = controlPoints[0]
         const cp2 = controlPoints[1]
         path += ` C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${end.x} ${end.y}`
@@ -92,7 +101,6 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
           y: (start.y + cp1.y + cp2.y + end.y) / 4,
         }
       } else if (controlPoints.length === 3) {
-        // Complex cubic curve with three control points
         const cp1 = controlPoints[0]
         const cp2 = controlPoints[1]
         const cp3 = controlPoints[2]
@@ -113,7 +121,6 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
       }
     }
 
-    // Original obstacle detection logic
     const obstacles = [...places, ...transitions].filter(
       (element) => element.id !== source.id && element.id !== target.id,
     )
@@ -173,22 +180,55 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
 
   const pathData = calculateCurvedPath()
 
+  const getFixedControlPointPosition = (index, totalPoints) => {
+    const positions = [0.25, 0.5, 0.75]
+    const t = positions[index] || 0.5
+
+    return {
+      x: pathData.start.x + (pathData.end.x - pathData.start.x) * t,
+      y: pathData.start.y + (pathData.end.y - pathData.start.y) * t,
+    }
+  }
+
+  const adjustAdjacentPoints = (draggedIndex, newPosition) => {
+    const newControlPoints = [...controlPoints]
+    newControlPoints[draggedIndex] = newPosition
+
+    if (draggedIndex > 0) {
+      const prevPoint = newControlPoints[draggedIndex - 1]
+      const influence = 0.3
+      newControlPoints[draggedIndex - 1] = {
+        x: prevPoint.x + (newPosition.x - prevPoint.x) * influence,
+        y: prevPoint.y + (newPosition.y - prevPoint.y) * influence,
+      }
+    }
+
+    if (draggedIndex < newControlPoints.length - 1) {
+      const nextPoint = newControlPoints[draggedIndex + 1]
+      const influence = 0.3
+      newControlPoints[draggedIndex + 1] = {
+        x: nextPoint.x + (newPosition.x - nextPoint.x) * influence,
+        y: nextPoint.y + (newPosition.y - nextPoint.y) * influence,
+      }
+    }
+
+    return newControlPoints
+  }
+
   const handleMouseDown = (event, index = -1) => {
-    if (event.button !== 0) return // Only left click
+    if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
 
-    const rect = svgRef.current.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
+    if (onArcDragStart) {
+      onArcDragStart()
+    }
 
     if (index === -1) {
-      // Add new control point
-      if (controlPoints.length < 3) {
-        const newControlPoints = [...controlPoints, { x, y }]
-        setControlPoints(newControlPoints)
-        setDragIndex(newControlPoints.length - 1)
-      }
+      const pointOnPath = getPointOnPath(event)
+      const newControlPoints = [...controlPoints, { x: pointOnPath.x, y: pointOnPath.y }]
+      setControlPoints(newControlPoints)
+      setDragIndex(newControlPoints.length - 1)
     } else {
       setDragIndex(index)
     }
@@ -200,37 +240,60 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
   const handleMouseMove = (event) => {
     if (!isDragging || dragIndex === -1) return
 
-    const rect = svgRef.current.getBoundingClientRect()
+    event.stopPropagation()
+
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (!rect) return
+
     const x = event.clientX - rect.left
     const y = event.clientY - rect.top
 
-    const newControlPoints = [...controlPoints]
-    newControlPoints[dragIndex] = { x, y }
-    setControlPoints(newControlPoints)
+    const newPosition = { x, y }
+    const adjustedPoints = adjustAdjacentPoints(dragIndex, newPosition)
+    setControlPoints(adjustedPoints)
   }
 
-  const handleMouseUp = () => {
-    if (isDragging && controlPoints.length > 0) {
-      // Save control points to backend
+  const handleMouseUp = (event) => {
+    if (event) {
+      event.stopPropagation()
+    }
+
+    if (!isDragging) return
+
+    if (controlPoints.length > 0) {
       if (onUpdate) {
         onUpdate(arc.id, { control_points: controlPoints })
       }
     }
+
     setIsDragging(false)
     setDragIndex(-1)
-    setTimeout(() => setShowControlPoints(false), 2000) // Hide control points after 2 seconds
+    setTimeout(() => setShowControlPoints(false), 2000)
+
+    if (onArcDragEnd) {
+      onArcDragEnd()
+    }
   }
 
   useEffect(() => {
-    if (isDragging) {
-      document.addEventListener("mousemove", handleMouseMove)
-      document.addEventListener("mouseup", handleMouseUp)
+    if (isDragging && dragIndex !== -1) {
+      const handleGlobalMouseMove = (event) => {
+        handleMouseMove(event)
+      }
+
+      const handleGlobalMouseUp = (event) => {
+        handleMouseUp(event)
+      }
+
+      document.addEventListener("mousemove", handleGlobalMouseMove, { passive: false })
+      document.addEventListener("mouseup", handleGlobalMouseUp, { passive: false })
+
       return () => {
-        document.removeEventListener("mousemove", handleMouseMove)
-        document.removeEventListener("mouseup", handleMouseUp)
+        document.removeEventListener("mousemove", handleGlobalMouseMove)
+        document.removeEventListener("mouseup", handleGlobalMouseUp)
       }
     }
-  }, [isDragging, dragIndex, controlPoints])
+  }, [isDragging, dragIndex, controlPoints, arc.id])
 
   const calculateArrowAngle = () => {
     const dx = pathData.end.x - pathData.start.x
@@ -250,16 +313,14 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
     event.preventDefault()
     event.stopPropagation()
 
-    // Create perfect curve when dragging weight
-    const rect = svgRef.current.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
+    if (onArcDragStart) {
+      onArcDragStart()
+    }
 
-    // Calculate perpendicular offset for perfect curve
     const dx = pathData.end.x - pathData.start.x
     const dy = pathData.end.y - pathData.start.y
     const distance = Math.sqrt(dx * dx + dy * dy)
-    const perpX = (-dy / distance) * 50 // Offset for curve
+    const perpX = (-dy / distance) * 50
     const perpY = (dx / distance) * 50
 
     const midX = (pathData.start.x + pathData.end.x) / 2
@@ -318,6 +379,27 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
     return () => document.removeEventListener("mousedown", handleOutsideClick)
   }, [isEditingWeight])
 
+  const getPointOnPath = (event) => {
+    const rect = svgRef.current.getBoundingClientRect()
+    const mouseX = event.clientX - rect.left
+    const mouseY = event.clientY - rect.top
+
+    const dx = pathData.end.x - pathData.start.x
+    const dy = pathData.end.y - pathData.start.y
+    const length = Math.sqrt(dx * dx + dy * dy)
+
+    if (length === 0) return { x: mouseX, y: mouseY, t: 0.5 }
+
+    const dotProduct = ((mouseX - pathData.start.x) * dx + (mouseY - pathData.start.y) * dy) / (length * length)
+    const t = Math.max(0.1, Math.min(0.9, dotProduct))
+
+    return {
+      x: pathData.start.x + dx * t,
+      y: pathData.start.y + dy * t,
+      t: t,
+    }
+  }
+
   return (
     <div className="arc-container">
       <svg
@@ -363,10 +445,24 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
           }}
         />
 
+        <path
+          d={pathData.path}
+          stroke="transparent"
+          strokeWidth="12"
+          fill="none"
+          className="arc-line-wide"
+          onClick={onSelect}
+          onContextMenu={handleContextMenu}
+          onMouseDown={handleMouseDown}
+          style={{
+            cursor: "pointer",
+          }}
+        />
+
         {showControlPoints &&
           controlPoints.map((point, index) => (
             <circle
-              key={index}
+              key={`${arc.id}-control-${index}`}
               cx={point.x}
               cy={point.y}
               r="6"
@@ -375,7 +471,10 @@ const Arc = ({ arc, source, target, places, transitions, onSelect, onContextMenu
               strokeWidth="2"
               className="control-point"
               onMouseDown={(e) => handleMouseDown(e, index)}
-              style={{ cursor: "grab" }}
+              style={{
+                cursor: isDragging && dragIndex === index ? "grabbing" : "grab",
+                pointerEvents: "all",
+              }}
             />
           ))}
       </svg>
