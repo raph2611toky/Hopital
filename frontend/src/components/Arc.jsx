@@ -79,12 +79,15 @@ const Arc = ({
   }
 
   const calculateCurvedPath = () => {
-    const sourceDirection = arc.source_direction || "BAS"
-    let start = calculateDirectionPosition(source, sourceDirection, true)
+    const isSourceTransition = transitions.some((transition) => transition.id === source.id)
+    const isTargetTransition = transitions.some((transition) => transition.id === target.id)
 
-    const isTargetPlace = places.some((place) => place.id === target.id)
-    const targetDirection = isTargetPlace ? "HAUT" : "BAS"
-    let end = calculateDirectionPosition(target, targetDirection, false)
+    // For transitions: force BAS (bottom) for outgoing arcs, HAUT (top) for incoming arcs
+    const sourceDirection = isSourceTransition ? "BAS" : arc.source_direction || "BAS"
+    const targetDirection = isTargetTransition ? "HAUT" : "HAUT"
+
+    let start = calculateDirectionPosition(source, sourceDirection, true)
+    const end = calculateDirectionPosition(target, targetDirection, false)
 
     const isSourcePlace = places.some((place) => place.id === source.id)
 
@@ -109,14 +112,6 @@ const Arc = ({
       start = {
         x: source.position.x + (intersectionX / magnitude) * scale * (start.x > source.position.x ? 1 : -1),
         y: source.position.y + (intersectionY / magnitude) * scale * (start.y > source.position.y ? 1 : -1),
-      }
-    }
-
-    if (isTargetPlace) {
-      const radius = 30
-      end = {
-        x: target.position.x,
-        y: target.position.y,
       }
     }
 
@@ -287,9 +282,27 @@ const Arc = ({
     const x = event.clientX - rect.left
     const y = event.clientY - rect.top
 
-    const newPosition = { x, y }
-    const adjustedPoints = adjustAdjacentPoints(dragIndex, newPosition)
-    setControlPoints(adjustedPoints)
+    const currentPoint = controlPoints[dragIndex]
+    if (currentPoint) {
+      const maxSpeed = 5 // Maximum pixels per frame
+      const dx = x - currentPoint.x
+      const dy = y - currentPoint.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+
+      if (distance > maxSpeed) {
+        const ratio = maxSpeed / distance
+        const newPosition = {
+          x: currentPoint.x + dx * ratio,
+          y: currentPoint.y + dy * ratio,
+        }
+        const adjustedPoints = adjustAdjacentPoints(dragIndex, newPosition)
+        setControlPoints(adjustedPoints)
+      } else {
+        const newPosition = { x, y }
+        const adjustedPoints = adjustAdjacentPoints(dragIndex, newPosition)
+        setControlPoints(adjustedPoints)
+      }
+    }
   }
 
   const handleMouseUp = (event) => {
@@ -409,6 +422,17 @@ const Arc = ({
     }
   }
 
+  const handleWeightContextMenu = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (onContextMenu) {
+      onContextMenu(event, "arc", arc, {
+        canBeInhibitor: canBeInhibitor(),
+        currentDirection: arc.source_direction || "BAS",
+      })
+    }
+  }
+
   useEffect(() => {
     const handleOutsideClick = (event) => {
       if (isEditingWeight && !event.target.closest(".weight-form-container")) {
@@ -501,7 +525,7 @@ const Arc = ({
           onMouseDown={handleMouseDown}
           style={{
             strokeDasharray: arc.is_inhibitor ? "5,5" : "none",
-            cursor: "pointer",
+            cursor: "pointer", // Ensure pointer cursor is visible
           }}
         />
 
@@ -515,7 +539,7 @@ const Arc = ({
           onContextMenu={handleContextMenu}
           onMouseDown={handleMouseDown}
           style={{
-            cursor: "pointer",
+            cursor: "pointer", // Add pointer cursor to wide invisible line
           }}
         />
 
@@ -544,9 +568,11 @@ const Arc = ({
         style={{
           left: pathData.midPoint.x - 15,
           top: pathData.midPoint.y - 15,
+          cursor: "pointer", // Add pointer cursor to weight
         }}
         onClick={handleWeightClick}
         onMouseDown={handleWeightMouseDown}
+        onContextMenu={handleWeightContextMenu} // Add context menu to weight
       >
         {isEditingWeight ? (
           <div className="weight-form-container">
@@ -558,6 +584,7 @@ const Arc = ({
                 autoFocus
                 min="1"
                 className="weight-input"
+                onContextMenu={(e) => e.stopPropagation()} // Prevent context menu on input to avoid conflicts
               />
               <div className="weight-form-buttons">
                 <button type="submit" className="weight-form-button weight-form-save">
