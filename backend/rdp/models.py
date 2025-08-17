@@ -94,6 +94,11 @@ class Arc(models.Model):
     weight = models.IntegerField(default=1, validators=[MinValueValidator(1)])
     is_inhibitor = models.BooleanField(default=False)
     is_reset = models.BooleanField(default=False)
+    source_direction = models.CharField(
+        max_length=10,
+        choices=[('HAUT', 'Haut'), ('GAUCHE', 'Gauche'), ('DROITE', 'Droite'), ('BAS', 'Bas')],
+        default='BAS'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

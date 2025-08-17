@@ -25,6 +25,7 @@ const Arc = ({
   const [showControlPoints, setShowControlPoints] = useState(false)
   const svgRef = useRef(null)
   const arcDragId = useRef(`arc-${arc.id}-${Date.now()}`)
+  const [isSourceTransition, setIsSourceTransition] = useState(false) // Declare isSourceTransition variable
 
   useEffect(() => {
     setTempWeight(arc.weight)
@@ -34,50 +35,88 @@ const Arc = ({
     setControlPoints(arc.control_points || [])
   }, [arc.control_points])
 
+  useEffect(() => {
+    // Check if source is a transition and update isSourceTransition state
+    setIsSourceTransition(transitions.some((transition) => transition.id === source.id))
+  }, [source, transitions])
+
+  const calculateDirectionPosition = (element, direction, isSource = true) => {
+    const isPlace = places.some((place) => place.id === element.id)
+    const radius = isPlace ? 30 : 0
+
+    if (isPlace) {
+      switch (direction) {
+        case "HAUT":
+          return { x: element.position.x, y: element.position.y - radius }
+        case "GAUCHE":
+          return { x: element.position.x - radius, y: element.position.y }
+        case "DROITE":
+          return { x: element.position.x + radius, y: element.position.y }
+        case "BAS":
+        default:
+          return { x: element.position.x, y: element.position.y + radius }
+      }
+    } else {
+      // For transitions, keep existing logic
+      const transition = transitions.find((t) => t.id === element.id)
+      const isLandscape = transition?.orientation === "landscape"
+      const halfWidth = isLandscape ? 25 : 15
+      const halfHeight = isLandscape ? 15 : 25
+
+      // Calculate based on direction for transitions too
+      switch (direction) {
+        case "HAUT":
+          return { x: element.position.x, y: element.position.y - halfHeight }
+        case "GAUCHE":
+          return { x: element.position.x - halfWidth, y: element.position.y }
+        case "DROITE":
+          return { x: element.position.x + halfWidth, y: element.position.y }
+        case "BAS":
+        default:
+          return { x: element.position.x, y: element.position.y + halfHeight }
+      }
+    }
+  }
+
   const calculateCurvedPath = () => {
-    let start = { ...source.position }
-    let end = { ...target.position }
+    const sourceDirection = arc.source_direction || "BAS"
+    let start = calculateDirectionPosition(source, sourceDirection, true)
+
+    const isTargetPlace = places.some((place) => place.id === target.id)
+    const targetDirection = isTargetPlace ? "HAUT" : "BAS"
+    let end = calculateDirectionPosition(target, targetDirection, false)
 
     const isSourcePlace = places.some((place) => place.id === source.id)
-    const isTargetPlace = places.some((place) => place.id === target.id)
-    const isSourceTransition = transitions.some((transition) => transition.id === source.id)
-    const isTargetTransition = transitions.some((transition) => transition.id === target.id)
-
-    const dx = end.x - start.x
-    const dy = end.y - start.y
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    const unitX = distance > 0 ? dx / distance : 0
-    const unitY = distance > 0 ? dy / distance : 0
 
     if (isSourcePlace) {
       const radius = 30
       start = {
-        x: source.position.x + unitX * radius,
-        y: source.position.y + unitY * radius,
+        x: source.position.x,
+        y: source.position.y,
       }
     } else if (isSourceTransition) {
       const sourceTransition = transitions.find((t) => t.id === source.id)
       const isLandscape = sourceTransition?.orientation === "landscape"
       const halfWidth = isLandscape ? 25 : 15
       const halfHeight = isLandscape ? 15 : 25
-      const tX = halfWidth / Math.abs(dx || 1)
-      const tY = halfHeight / Math.abs(dy || 1)
+      const tX = halfWidth / Math.abs(start.x - source.position.x || 1)
+      const tY = halfHeight / Math.abs(start.y - source.position.y || 1)
       const t = Math.min(tX, tY)
-      const intersectionX = dx * t
-      const intersectionY = dy * t
+      const intersectionX = (start.x - source.position.x) * t
+      const intersectionY = (start.y - source.position.y) * t
       const magnitude = Math.sqrt(intersectionX * intersectionX + intersectionY * intersectionY)
       const scale = magnitude > 0 ? (halfWidth * halfHeight) / magnitude : 1
       start = {
-        x: source.position.x + (intersectionX / magnitude) * scale * (dx > 0 ? 1 : -1),
-        y: source.position.y + (intersectionY / magnitude) * scale * (dy > 0 ? 1 : -1),
+        x: source.position.x + (intersectionX / magnitude) * scale * (start.x > source.position.x ? 1 : -1),
+        y: source.position.y + (intersectionY / magnitude) * scale * (start.y > source.position.y ? 1 : -1),
       }
     }
 
     if (isTargetPlace) {
       const radius = 30
       end = {
-        x: target.position.x - unitX * radius,
-        y: target.position.y - unitY * radius,
+        x: target.position.x,
+        y: target.position.y,
       }
     }
 
@@ -350,9 +389,7 @@ const Arc = ({
   }
 
   const canBeInhibitor = () => {
-    const isSourceTransition = transitions.some((transition) => transition.id === source.id)
-    const isTargetPlace = places.some((place) => place.id === target.id)
-    return !(isSourceTransition && isTargetPlace)
+    return !(isSourceTransition && places.some((place) => place.id === target.id))
   }
 
   const handlePropertyUpdate = (property, value) => {
@@ -365,7 +402,10 @@ const Arc = ({
     event.preventDefault()
     event.stopPropagation()
     if (onContextMenu) {
-      onContextMenu(event, "arc", arc, { canBeInhibitor: canBeInhibitor() })
+      onContextMenu(event, "arc", arc, {
+        canBeInhibitor: canBeInhibitor(),
+        currentDirection: arc.source_direction || "BAS",
+      })
     }
   }
 
@@ -400,6 +440,17 @@ const Arc = ({
     }
   }
 
+  const getArcColor = () => {
+    if (arc.is_inhibitor) return "#ef4444" // Rouge pour inhibiteur
+    if (arc.is_reset) return "#10b981" // Vert pour reset
+    return "#374151" // Couleur normale
+  }
+
+  const getSelectedColor = () => {
+    if (isDragging) return getArcColor() // Garder la couleur du type pendant le drag
+    return selected ? "#3b82f6" : getArcColor()
+  }
+
   return (
     <div className="arc-container">
       <svg
@@ -420,18 +471,27 @@ const Arc = ({
             markerUnits="strokeWidth"
           >
             {arc.is_inhibitor ? (
-              <circle cx="5" cy="3" r="3" fill="none" stroke={selected ? "#3b82f6" : "#374151"} strokeWidth="2" />
+              <circle cx="5" cy="3" r="3" fill="none" stroke={getSelectedColor()} strokeWidth="2" />
             ) : arc.is_reset ? (
-              <path d="M2,3 L5,0 L8,3 L5,6 z" fill="none" stroke={selected ? "#3b82f6" : "#374151"} strokeWidth="2" />
+              <path d="M2,3 L5,0 L8,3 L5,6 z" fill="none" stroke={getSelectedColor()} strokeWidth="2" />
             ) : (
-              <path d="M0,0 L0,6 L9,3 z" fill={selected ? "#3b82f6" : "#374151"} />
+              <path d="M0,0 L0,6 L9,3 z" fill={getSelectedColor()} />
             )}
           </marker>
         </defs>
 
+        <circle
+          cx={pathData.start.x}
+          cy={pathData.start.y}
+          r="3"
+          fill={getSelectedColor()}
+          className="arc-direction-indicator"
+          style={{ opacity: showControlPoints ? 1 : 0 }}
+        />
+
         <path
           d={pathData.path}
-          stroke={selected ? "#3b82f6" : "#374151"}
+          stroke={getSelectedColor()}
           strokeWidth={selected ? "3" : "2"}
           fill="none"
           markerEnd={`url(#arrowhead-${arc.id})`}
@@ -466,7 +526,7 @@ const Arc = ({
               cx={point.x}
               cy={point.y}
               r="6"
-              fill="#3b82f6"
+              fill={getSelectedColor()}
               stroke="#ffffff"
               strokeWidth="2"
               className="control-point"
