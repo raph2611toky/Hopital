@@ -252,3 +252,118 @@ Pour enrichir le réseau, ajoutons un scénario plus complexe avec une gestion d
 - **Visualisation** : Dans `Place.jsx`, animez les jetons de P1 à P2 avec un effet de déplacement. Dans `Transition.jsx`, surlignez T1 et T4 quand activés (`.enabled`). Dans `Arc.jsx`, animez les arcs avec `stroke-dashoffset`.
 
 ---
+---
+
+### Objectif
+
+Ce document fournit un guide détaillé pour concevoir un réseau de Petri complexe basé sur un scénario hospitalier enrichi, intégrant des arcs inhibiteurs et réinitialisateurs, ainsi que des données supplémentaires pour un scénario complet. Le réseau inclura des places, des transitions, des arcs avec des directions spécifiques (haut, gauche, droite, bas), des poids, et des comportements dynamiques tels que des délais et des priorités. Ce réseau sera construit à partir des éléments initiaux fournis (P1, P2, P3, P4, P5, T1, T2, T3) et étendu pour refléter un système hospitalier plus réaliste, tout en respectant les modifications récentes (directions des arcs, points de contrôle curvilignes).
+
+---
+
+### Scénario 2 détaillé : Gestion hospitalière complexe
+
+#### Contexte
+L'objectif est de modéliser un hôpital avec une gestion avancée des patients, des ressources, et des processus. Le réseau inclut des files d'attente, des traitements, des lits, des interruptions, et des réinitialisations, avec des arcs inhibiteurs pour gérer les contraintes et des arcs réinitialisateurs pour réorganiser les flux en cas d'urgence.
+
+#### Éléments du réseau
+
+##### Places
+- **P1 : File d'attente initiale** (5 jetons initiaux) : Patients attendant l'admission.
+- **P2 : Patients admis** (capacité 3, 0 jeton initial) : Patients en cours de traitement, limitée à 3.
+- **P3 : Lits disponibles** (3 jetons initiaux) : Lits libres dans l'unité.
+- **P4 : Patients sortis** (0 jeton initial) : Patients ayant terminé leur traitement.
+- **P5 : Nouveaux patients** (0 jeton initial) : Arrivée de nouveaux patients pour réapprovisionner P1.
+- **P6 : Urgences** (0 jeton initial, capacité 2) : Patients nécessitant une admission prioritaire.
+- **P7 : Salle d'opération** (1 jeton initial) : Ressource pour les chirurgies.
+- **P8 : Patients en chirurgie** (0 jeton initial, capacité 1) : Patients en cours d'opération.
+- **P9 : Patients réadmis** (0 jeton initial) : Patients retournant en traitement après une réinitialisation.
+
+##### Transitions
+- **T1 : Admission standard** : Déplace un patient de P1 à P2 si un lit est disponible (P3) et sans urgence en cours.
+- **T2 : Traitement et sortie** : Déplace un patient de P2 à P4 et libère un lit dans P3.
+- **T3 : Arrivée de nouveaux patients** : Ajoute un patient de P5 à P1 toutes les 5 secondes.
+- **T4 : Admission d'urgence** : Déplace un patient de P6 à P2, prioritaire sur T1, avec un lit requis.
+- **T5 : Préparation chirurgie** : Déplace un patient de P2 à P8 si la salle d'opération (P7) est libre.
+- **T6 : Chirurgie terminée** : Déplace un patient de P8 à P4 et libère P7.
+- **T7 : Réinitialisation d'urgence** : Réinitialise P2 et P3 en cas de surcharge, redirigeant les patients vers P9.
+
+#### Connexions et arcs
+##### Arcs standards
+- **P1 → T1** : Poids = 1, Direction = BAS (sortie), Entrée = HAUT (T1).
+- **P3 → T1** : Poids = 1, Direction = BAS, Entrée = HAUT.
+- **T1 → P2** : Poids = 1, Direction = HAUT (sortie T1), Entrée = HAUT.
+- **T1 → P3** : Poids = -1 (logique, pas de jeton réel consommé), Direction = HAUT, Entrée = HAUT.
+- **P2 → T2** : Poids = 1, Direction = BAS, Entrée = HAUT.
+- **T2 → P4** : Poids = 1, Direction = HAUT, Entrée = HAUT.
+- **T2 → P3** : Poids = 1, Direction = HAUT, Entrée = HAUT.
+- **P5 → T3** : Poids = 1, Direction = BAS, Entrée = HAUT.
+- **T3 → P1** : Poids = 1, Direction = HAUT, Entrée = HAUT.
+- **P6 → T4** : Poids = 1, Direction = BAS, Entrée = HAUT.
+- **P3 → T4** : Poids = 1, Direction = BAS, Entrée = HAUT.
+- **T4 → P2** : Poids = 1, Direction = HAUT, Entrée = HAUT.
+- **P2 → T5** : Poids = 1, Direction = BAS, Entrée = HAUT.
+- **P7 → T5** : Poids = 1, Direction = BAS, Entrée = HAUT.
+- **T5 → P8** : Poids = 1, Direction = HAUT, Entrée = HAUT.
+- **P8 → T6** : Poids = 1, Direction = BAS, Entrée = HAUT.
+- **T6 → P4** : Poids = 1, Direction = HAUT, Entrée = HAUT.
+- **T6 → P7** : Poids = 1, Direction = HAUT, Entrée = HAUT.
+- **P2 → T7** : Poids = 1, Direction = BAS, Entrée = HAUT (arc réinitialisateur).
+- **T7 → P9** : Poids = 1, Direction = HAUT, Entrée = HAUT.
+
+##### Arc inhibiteur
+- **P6 → T1** : Poids = 1, Direction = BAS, Type = Inhibiteur. Cet arc empêche T1 (admission standard) de se déclencher si une urgence (P6 > 0) est en cours.
+
+##### Arc réinitialisateur
+- **P2 → T7** : Poids = 1, Direction = BAS, Type = Réinitialisateur. Cet arc vide complètement P2 (patients admis) et redirige les patients vers P9 en cas de surcharge ou d'urgence critique.
+
+#### Paramètres supplémentaires
+- **Délais** :
+  - T1 : Délai moyen = 2 secondes.
+  - T2 : Délai moyen = 5 secondes.
+  - T3 : Délai fixe = 5 secondes.
+  - T4 : Délai moyen = 1 seconde (priorité).
+  - T5 : Délai moyen = 3 secondes.
+  - T6 : Délai moyen = 4 secondes.
+  - T7 : Délai moyen = 1 seconde (urgence).
+- **Priorités** :
+  - T4 (admission d'urgence) : Priorité = 2.
+  - T1, T2, T3, T5, T6, T7 : Priorité = 1.
+- **Capacités** :
+  - P2 : Capacité = 3.
+  - P6 : Capacité = 2.
+  - P8 : Capacité = 1.
+  - Autres : Illimitées sauf indication contraire.
+
+#### Comportement attendu
+- **Flux normal** : Les patients de P1 sont admis via T1 si P3 > 0 et P6 = 0, traités via T2, et sortent via P4. P5 réapprovisionne P1 via T3.
+- **Urgence** : Si P6 > 0, T4 prend le dessus sur T1, utilisant un lit de P3.
+- **Chirurgie** : Si P7 > 0, T5 envoie un patient de P2 à P8, et T6 le ramène à P4.
+- **Réinitialisation** : Si P2 atteint sa capacité (3) et une condition d'urgence est détectée (ex. : P6 plein), T7 réinitialise P2 et redirige vers P9.
+
+---
+
+### Instructions pour implémenter le réseau dans l'application
+
+#### Configuration initiale
+- Créez les places P1 (5 jetons), P2 (0, capacité 3), P3 (3 jetons), P4 (0), P5 (0), P6 (0, capacité 2), P7 (1 jeton), P8 (0, capacité 1), et P9 (0) via le menu contextuel.
+- Ajoutez les transitions T1, T2, T3, T4, T5, T6, et T7 avec leurs labels et orientations (par défaut portrait).
+- Connectez les arcs avec les poids, directions, et types spécifiés :
+  - Utilisez le mode connexion pour lier les places et transitions.
+  - Ajoutez l'arc inhibiteur P6 → T1 via le menu contextuel (option "Arc inhibiteur").
+  - Ajoutez l'arc réinitialisateur P2 → T7 via le menu contextuel (option "Arc de remise à zéro").
+
+#### Ajustements visuels
+- Définissez les directions des arcs (ex. : P1 → T1 : BAS, T1 → P2 : HAUT) via le menu contextuel.
+- Ajustez les points de contrôle (25 %, 50 %, 75 %) pour éviter les superpositions, notamment pour les arcs inhibiteurs et réinitialisateurs.
+
+#### Simulation
+- Lancez la simulation avec "Play" pour observer le flux normal (T1, T2, T3).
+- Ajoutez des jetons dans P6 pour déclencher T4 et tester l'inhibiteur sur T1.
+- Remplissez P2 (3 jetons) et activez T7 pour tester la réinitialisation vers P9.
+- Utilisez "Step" pour valider chaque transition individuellement.
+
+#### Validation
+- Vérifiez que `validation.deadlock` se met à jour correctement (ex. : si P3 = 0 et P6 plein).
+- Assurez-vous que les capacités (P2, P6, P8) sont respectées.
+
+---

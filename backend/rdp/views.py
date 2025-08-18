@@ -241,8 +241,9 @@ class TransitionRetrieveView(APIView):
 class TransitionUpdateView(APIView):
     def put(self, request, pk):
         try:
+            print(request.data)
             transition = Transition.objects.get(pk=pk)
-            serializer = TransitionSerializer(transition, data=request.data, partial=True)
+            serializer = TransitionSerializer(transition, data=request.data)
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data)
