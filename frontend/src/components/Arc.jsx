@@ -16,7 +16,7 @@ const Arc = ({
   onDelete,
   onArcDragStart,
   onArcDragEnd,
-  canBeInhibitor
+  canBeInhibitor,
 }) => {
   const [isEditingWeight, setIsEditingWeight] = useState(false)
   const [tempWeight, setTempWeight] = useState(arc.weight)
@@ -297,7 +297,7 @@ const Arc = ({
 
     if (controlPoints.length > 0) {
       if (onUpdate) {
-        onUpdate(arc.id, { control_points: controlPoints })
+        onUpdate(arc.id, { control_points: controlPoints }, "arc")
       }
     }
 
@@ -305,7 +305,6 @@ const Arc = ({
     setDragIndex(-1)
     setShowControlPoints(false)
 
-    // Deselect the arc after dragging to prevent it staying blue
     if (onSelect) {
       onSelect(null)
     }
@@ -378,7 +377,7 @@ const Arc = ({
     event.stopPropagation()
     const newWeight = Math.max(1, Number.parseInt(tempWeight, 10) || 1)
     if (onUpdate && newWeight !== arc.weight) {
-      onUpdate(arc.id, { weight: newWeight })
+      onUpdate(arc.id, { weight: newWeight }, "arc")
     }
     setIsEditingWeight(false)
   }
@@ -389,13 +388,9 @@ const Arc = ({
     setTempWeight(arc.weight)
   }
 
-  // const canBeInhibitor = () => {
-  //   return !(isSourceTransition && places.some((place) => place.id === target.id))
-  // }
-
   const handlePropertyUpdate = (property, value) => {
     if (onUpdate) {
-      onUpdate(arc.id, { [property]: value })
+      onUpdate(arc.id, { [property]: value }, "arc")
     }
   }
 

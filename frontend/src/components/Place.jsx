@@ -14,6 +14,7 @@ const Place = ({
   isDragged,
   isActive, // New prop for active state
   isFull, // New prop for full state
+  updateElement, // New prop for updateElement function
 }) => {
   const placeRef = useRef(null)
 
@@ -42,6 +43,10 @@ const Place = ({
     event.preventDefault()
     event.stopPropagation()
     onRightClick(event)
+  }
+
+  const handleUpdate = (updates) => {
+    updateElement(place.id, updates, "place")
   }
 
   const renderTokens = () => {

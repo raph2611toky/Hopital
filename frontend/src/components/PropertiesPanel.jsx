@@ -3,7 +3,7 @@
 import { useState } from "react"
 import "./PropertiesPanel.css"
 
-const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
+const PropertiesPanel = ({ selected, selectedType, onUpdate, onDelete }) => {
   const [editedValues, setEditedValues] = useState({})
   const [hasChanges, setHasChanges] = useState(false)
 
@@ -14,7 +14,7 @@ const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
 
   const handleSave = () => {
     if (selected && hasChanges) {
-      onUpdate(selected.id, editedValues)
+      onUpdate(selected.id, editedValues, selectedType)
       setEditedValues({})
       setHasChanges(false)
     }
@@ -27,8 +27,7 @@ const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
 
   const handleDelete = () => {
     if (selected) {
-      const type = isPlace ? "place" : isTransition ? "transition" : "arc"
-      onDelete(selected.id, type)
+      onDelete(selected.id)
     }
   }
 
@@ -49,9 +48,9 @@ const PropertiesPanel = ({ selected, onUpdate, onDelete }) => {
     )
   }
 
-  const isPlace = selected.tokens !== undefined
-  const isTransition = !isPlace && !selected.source
-  const isArc = selected.source && selected.target
+  const isPlace = selectedType === "place"
+  const isTransition = selectedType === "transition"
+  const isArc = selectedType === "arc"
 
   return (
     <div className="properties-panel">

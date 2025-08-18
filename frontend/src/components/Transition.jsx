@@ -12,8 +12,9 @@ const Transition = ({
   selected,
   isConnecting,
   isDragged,
-  isEnabled, // New prop for enabled state
-  isFiring, // New prop for firing animation
+  isEnabled,
+  isFiring,
+  onUpdate,
 }) => {
   const transitionRef = useRef(null)
 
@@ -42,6 +43,11 @@ const Transition = ({
     event.preventDefault()
     event.stopPropagation()
     onRightClick(event)
+  }
+
+  const handleUpdate = (updates) => {
+    console.log("handle update transition...")
+    onUpdate(transition.id, updates, "transition")
   }
 
   // Adjust positioning based on orientation
@@ -73,7 +79,9 @@ const Transition = ({
       onContextMenu={handleContextMenu}
       title={transition.label}
     >
-      <div className="transition-rect">{transition.type === "timed" && <div className="transition-timer">⏱</div>}</div>
+      <div className="transition-rect" onClick={() => handleUpdate({ type: "timed" })}>
+        {transition.type === "timed" && <div className="transition-timer">⏱</div>}
+      </div>
       <div className="transition-label">{transition.label}</div>
     </div>
   )

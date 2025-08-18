@@ -20,6 +20,7 @@ const PetriEditor = () => {
   const [transitions, setTransitions] = useState([])
   const [arcs, setArcs] = useState([])
   const [selected, setSelected] = useState(null)
+  const [selectedType, setSelectedType] = useState(null) // Modified state to include element type with selected element
   const [simulationInterval, setSimulationInterval] = useState(null)
   const [contextMenu, setContextMenu] = useState({ x: 0, y: 0, visible: false, type: null })
   const [isSimulating, setIsSimulating] = useState(false) // Added to track simulation state
@@ -364,7 +365,7 @@ const PetriEditor = () => {
         a.click()
       } catch (error) {
         console.error("Export PNG failed:", error)
-        alert("Export PNG nécessite l'installation de html2canvas")
+        console.error("Export PNG nécessite l'installation de html2canvas")
       }
     }
   }, [])
@@ -507,14 +508,35 @@ const PetriEditor = () => {
         let updatedElement
 
         if (type === "place") {
-          updatedElement = await apiService.updatePlace(draggedElement.id, { position: draggedElement.position })
+          const updateData = {
+            petri_net: draggedElement.petri_net,
+            id_in_net: draggedElement.id_in_net,
+            label: draggedElement.label,
+            position: draggedElement.position,
+            tokens: draggedElement.tokens,
+            capacity: draggedElement.capacity,
+            token_color: draggedElement.token_color,
+          }
+          updatedElement = await apiService.updatePlace(draggedElement.id, updateData)
           setPlaces((prev) => prev.map((p) => (p.id === draggedElement.id ? updatedElement : p)))
         } else {
-          updatedElement = await apiService.updateTransition(draggedElement.id, { position: draggedElement.position })
+          const updateData = {
+            petri_net: draggedElement.petri_net,
+            id_in_net: draggedElement.id_in_net,
+            label: draggedElement.label,
+            position: draggedElement.position,
+            enabled: draggedElement.enabled,
+            type: draggedElement.type,
+            delay_mean: draggedElement.delay_mean,
+            priority: draggedElement.priority,
+            orientation: draggedElement.orientation,
+            layer: draggedElement.layer,
+          }
+          updatedElement = await apiService.updateTransition(draggedElement.id, updateData)
           setTransitions((prev) => prev.map((t) => (t.id === draggedElement.id ? updatedElement : t)))
         }
 
-        console.log("[v0] Position updated successfully:", updatedElement)
+        console.log("Position updated successfully:", updatedElement)
       } catch (err) {
         console.error("Erreur lors de la mise à jour de la position:", err)
 
@@ -527,7 +549,7 @@ const PetriEditor = () => {
           )
         }
 
-        alert("Erreur lors de la sauvegarde de la position. La position a été restaurée.")
+        console.error("Erreur lors de la sauvegarde de la position. La position a été restaurée.")
       }
     }
 
@@ -623,6 +645,7 @@ const PetriEditor = () => {
   const handleElementRightClick = useCallback((element, event) => {
     event.preventDefault()
     setSelected(element)
+    setSelectedType(element.tokens !== undefined ? "place" : element.source && element.target ? "arc" : "transition") // Updated selectElement to also set the element type
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
@@ -721,32 +744,62 @@ const PetriEditor = () => {
   )
 
   const updateElement = useCallback(
-    async (id, updates) => {
+    async (id, updates, elementType) => {
       try {
-        const type = places.find((p) => p.id === id)
-          ? "place"
-          : transitions.find((t) => t.id === id)
-            ? "transition"
-            : "arc"
-
+        const type =
+          elementType ||
+          (places.find((p) => p.id === id) ? "place" : transitions.find((t) => t.id === id) ? "transition" : "arc")
         let updatedElement
+        console.log(type)
         if (type === "place") {
-          updatedElement = await apiService.updatePlace(id, updates)
+          const currentPlace = places.find((p) => p.id === id)
+          const completeUpdates = {
+            petri_net: currentPlace?.petri_net || currentPetriNet,
+            id_in_net: currentPlace?.id_in_net,
+            label: currentPlace?.label,
+            position: currentPlace?.position,
+            tokens: currentPlace?.tokens,
+            capacity: currentPlace?.capacity,
+            token_color: currentPlace?.token_color,
+            ...updates,
+          }
+          updatedElement = await apiService.updatePlace(id, completeUpdates)
           setPlaces((prev) => prev.map((p) => (p.id === id ? updatedElement : p)))
         } else if (type === "transition") {
-          updatedElement = await apiService.updateTransition(id, updates)
+          const currentTransition = transitions.find((t) => t.id === id)
+          const completeUpdates = {
+            petri_net: currentTransition?.petri_net || currentPetriNet,
+            id_in_net: currentTransition?.id_in_net,
+            label: currentTransition?.label,
+            position: currentTransition?.position,
+            enabled: currentTransition?.enabled,
+            type: currentTransition?.type,
+            delay_mean: currentTransition?.delay_mean,
+            priority: currentTransition?.priority,
+            orientation: currentTransition?.orientation,
+            layer: currentTransition?.layer,
+            ...updates,
+          }
+          updatedElement = await apiService.updateTransition(id, completeUpdates)
           setTransitions((prev) => prev.map((t) => (t.id === id ? updatedElement : t)))
         } else {
-          updatedElement = await apiService.updateArc(id, updates)
+          const currentArc = arcs.find((a) => a.id === id)
+          const completeUpdates = {
+            petri_net: currentArc?.petri_net || currentPetriNet,
+            id_in_net: currentArc?.id_in_net,
+            ...updates,
+          }
+
+          updatedElement = await apiService.updateArc(id, completeUpdates)
           setArcs((prev) => prev.map((a) => (a.id === id ? updatedElement : a)))
         }
         checkValidation()
       } catch (err) {
         console.error(`Erreur lors de la mise à jour de l'élément:`, err)
-        alert("Erreur lors de la sauvegarde des modifications.")
+        console.error("Erreur lors de la sauvegarde des modifications.")
       }
     },
-    [places, transitions, arcs, checkValidation],
+    [places, transitions, arcs, checkValidation, currentPetriNet],
   )
 
   const createNetwork = useCallback(async (networkData) => {
@@ -802,7 +855,7 @@ const PetriEditor = () => {
   const handleEditWeight = useCallback(
     async (arcId, newWeight) => {
       try {
-        await updateElement(arcId, { weight: Number.parseInt(newWeight) || 1 })
+        await updateElement(arcId, { weight: Number.parseInt(newWeight) || 1 }, "arc")
       } catch (err) {
         console.error("Erreur lors de la modification du poids:", err)
       }
@@ -815,7 +868,7 @@ const PetriEditor = () => {
       const arc = arcs.find((a) => a.id === arcId)
       if (arc) {
         try {
-          await updateElement(arcId, { is_inhibitor: !arc.is_inhibitor })
+          await updateElement(arcId, { is_inhibitor: !arc.is_inhibitor }, "arc")
         } catch (err) {
           console.error("Erreur lors du basculement inhibiteur:", err)
         }
@@ -829,7 +882,7 @@ const PetriEditor = () => {
       const arc = arcs.find((a) => a.id === arcId)
       if (arc) {
         try {
-          await updateElement(arcId, { is_reset: !arc.is_reset })
+          await updateElement(arcId, { is_reset: !arc.is_reset }, "arc")
         } catch (err) {
           console.error("Erreur lors du basculement reset:", err)
         }
@@ -958,7 +1011,7 @@ const PetriEditor = () => {
             style={{
               transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
               transformOrigin: "0 0",
-              transition: "transform 0.2s ease", // Add smooth transform transitions
+              transition: "transform 0.2s ease",
             }}
           >
             <div className="grid-background" />
@@ -999,9 +1052,9 @@ const PetriEditor = () => {
                         deleteElement(element.id, "arc")
                       }
                     }}
-                    onArcDragStart={handleArcDragStart} // Added arc drag callbacks to prevent canvas movement during arc manipulation
+                    onArcDragStart={handleArcDragStart}
                     onArcDragEnd={handleArcDragEnd}
-                    canBeInhibitor={()=> canBeInhibitor(arc.id)}
+                    canBeInhibitor={() => canBeInhibitor(arc.id)}
                   />
                 )
               }
@@ -1046,8 +1099,9 @@ const PetriEditor = () => {
                   selected={selected?.id === place.id}
                   isConnecting={isConnecting}
                   isDragged={draggedElement?.id === place.id}
-                  isActive={isInvolvedInTransition} // Pass active state
-                  isFull={place.capacity && place.tokens >= place.capacity} // Pass full state
+                  isActive={isInvolvedInTransition}
+                  isFull={place.capacity && place.tokens >= place.capacity}
+                  updateElement={updateElement}
                 />
               )
             })}
@@ -1067,8 +1121,9 @@ const PetriEditor = () => {
                   selected={selected?.id === transition.id}
                   isConnecting={isConnecting}
                   isDragged={draggedElement?.id === transition.id}
-                  isEnabled={isEnabled} // Pass enabled state
-                  isFiring={firingTransitionId === transition.id} // Pass firing state
+                  isEnabled={isEnabled}
+                  isFiring={firingTransitionId === transition.id}
+                  onUpdate={updateElement}
                 />
               )
             })}
@@ -1078,13 +1133,15 @@ const PetriEditor = () => {
         <div className="sidebar">
           <PropertiesPanel
             selected={selected}
-            onUpdate={updateElement}
-            onDelete={(id, type) => {
-              deleteElement(id, type)
+            selectedType={selectedType}
+            onUpdate={(id, updates) => updateElement(id, updates, selectedType)}
+            onDelete={(id) => {
+              deleteElement(id, selectedType)
               setSelected(null)
+              setSelectedType(null)
             }}
             onDuplicate={duplicateElement}
-            validation={validation} // Pass validation state to properties panel
+            validation={validation}
           />
         </div>
       </div>
