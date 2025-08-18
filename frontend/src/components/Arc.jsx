@@ -27,6 +27,13 @@ const Arc = ({
   const svgRef = useRef(null)
   const arcDragId = useRef(`arc-${arc.id}-${Date.now()}`)
   const [isSourceTransition, setIsSourceTransition] = useState(false) // Declare isSourceTransition variable
+  const [pathData, setPathData] = useState({
+    path: "",
+    midPoint: { x: 0, y: 0 },
+    isCurved: false,
+    start: { x: 0, y: 0 },
+    end: { x: 0, y: 0 },
+  })
 
   useEffect(() => {
     setTempWeight(arc.weight)
@@ -58,13 +65,11 @@ const Arc = ({
           return { x: element.position.x, y: element.position.y + radius }
       }
     } else {
-      // For transitions, keep existing logic
       const transition = transitions.find((t) => t.id === element.id)
       const isLandscape = transition?.orientation === "landscape"
-      const halfWidth = isLandscape ? 25 : 15
-      const halfHeight = isLandscape ? 15 : 25
+      const halfWidth = isLandscape ? 20 : 10 // Reduced from 25/15 to 20/10
+      const halfHeight = isLandscape ? 10 : 20 // Reduced from 15/25 to 10/20
 
-      // Calculate based on direction for transitions too
       switch (direction) {
         case "HAUT":
           return { x: element.position.x, y: element.position.y - halfHeight }
@@ -76,6 +81,177 @@ const Arc = ({
         default:
           return { x: element.position.x, y: element.position.y + halfHeight }
       }
+    }
+  }
+
+  const calculateRectangularPath = (start, end, controlPoints) => {
+    const dx = Math.abs(end.x - start.x)
+    const dy = Math.abs(end.y - start.y)
+    const tolerance = 2 // pixels
+
+    // If perfectly aligned, return straight line
+    if (dx <= tolerance || dy <= tolerance) {
+      return `M ${start.x} ${start.y} L ${end.x} ${end.y}`
+    }
+
+    if (!controlPoints || controlPoints.length === 0) {
+      return `M ${start.x} ${start.y} L ${end.x} ${end.y}`
+    }
+
+    const radius = 10 // Radius for rounded corners
+    const exitDistance = 15 // Distance to travel before turning
+    let path = `M ${start.x} ${start.y}`
+
+    // Determine if we need rectangular routing based on distance and control points
+    const shouldUseRectangular = dx > 50 || dy > 50 || controlPoints.length > 0
+
+    if (shouldUseRectangular && controlPoints.length > 0) {
+      const cp1 = controlPoints[0]
+
+      // Create rectangular path with rounded corners
+      if (controlPoints.length === 1) {
+        const midX = cp1.x
+        const midY = cp1.y
+
+        // Determine primary direction based on which coordinate changed more from start
+        const deltaX = Math.abs(midX - start.x)
+        const deltaY = Math.abs(midY - start.y)
+        const goHorizontalFirst = deltaX > deltaY
+
+        if (goHorizontalFirst) {
+          // Go horizontal first, then vertical - only horizontal segment stretches
+          const exitX = start.x + Math.sign(midX - start.x) * exitDistance
+          const fixedCornerY = start.y // Keep Y coordinate fixed at start level
+          const stretchedCornerX = midX // Only X stretches to control point
+
+          path += ` L ${exitX} ${fixedCornerY}` // Exit horizontally first
+
+          if (Math.abs(stretchedCornerX - exitX) > radius && Math.abs(end.y - fixedCornerY) > radius) {
+            path += ` L ${stretchedCornerX - Math.sign(stretchedCornerX - exitX) * radius} ${fixedCornerY}`
+            path += ` A ${radius} ${radius} 0 0 ${stretchedCornerX > exitX && end.y > fixedCornerY ? 1 : 0} ${stretchedCornerX} ${fixedCornerY + Math.sign(end.y - fixedCornerY) * radius}`
+            path += ` L ${stretchedCornerX} ${end.y - Math.sign(end.y - fixedCornerY) * radius}`
+            path += ` A ${radius} ${radius} 0 0 ${stretchedCornerX > end.x && end.y > fixedCornerY ? 0 : 1} ${stretchedCornerX + Math.sign(end.x - stretchedCornerX) * radius} ${end.y}`
+            path += ` L ${end.x} ${end.y}`
+          } else {
+            path += ` L ${stretchedCornerX} ${fixedCornerY} L ${end.x} ${end.y}`
+          }
+        } else {
+          // Go vertical first, then horizontal - only vertical segment stretches
+          const exitY = start.y + Math.sign(midY - start.y) * exitDistance
+          const fixedCornerX = start.x // Keep X coordinate fixed at start level
+          const stretchedCornerY = midY // Only Y stretches to control point
+
+          path += ` L ${fixedCornerX} ${exitY}` // Exit vertically first
+
+          if (Math.abs(stretchedCornerY - exitY) > radius && Math.abs(end.x - fixedCornerX) > radius) {
+            path += ` L ${fixedCornerX} ${stretchedCornerY - Math.sign(stretchedCornerY - exitY) * radius}`
+            path += ` A ${radius} ${radius} 0 0 ${end.x > fixedCornerX && stretchedCornerY > exitY ? 1 : 0} ${fixedCornerX + Math.sign(end.x - fixedCornerX) * radius} ${stretchedCornerY}`
+            path += ` L ${end.x - Math.sign(end.x - fixedCornerX) * radius} ${stretchedCornerY}`
+            path += ` A ${radius} ${radius} 0 0 ${end.x > fixedCornerX && end.y > stretchedCornerY ? 1 : 0} ${end.x} ${stretchedCornerY + Math.sign(end.y - stretchedCornerY) * radius}`
+            path += ` L ${end.x} ${end.y}`
+          } else {
+            path += ` L ${fixedCornerX} ${stretchedCornerY} L ${end.x} ${end.y}`
+          }
+        }
+      } else if (controlPoints.length >= 2) {
+        // Multiple control points - create path with rounded corners at each point
+        let prevPoint = start
+
+        const firstCP = controlPoints[0]
+        const initialDirection = {
+          x: firstCP.x - start.x,
+          y: firstCP.y - start.y,
+        }
+        const initialMagnitude = Math.sqrt(
+          initialDirection.x * initialDirection.x + initialDirection.y * initialDirection.y,
+        )
+        if (initialMagnitude > 0) {
+          const normalizedX = initialDirection.x / initialMagnitude
+          const normalizedY = initialDirection.y / initialMagnitude
+          const exitPoint = {
+            x: start.x + normalizedX * exitDistance,
+            y: start.y + normalizedY * exitDistance,
+          }
+          path += ` L ${exitPoint.x} ${exitPoint.y}`
+          prevPoint = exitPoint
+        }
+
+        for (let i = 0; i < controlPoints.length; i++) {
+          const currentPoint = controlPoints[i]
+          const nextPoint = i < controlPoints.length - 1 ? controlPoints[i + 1] : end
+
+          // Calculate direction to current point
+          const toCurrent = {
+            x: currentPoint.x - prevPoint.x,
+            y: currentPoint.y - prevPoint.y,
+          }
+
+          // Calculate direction from current point
+          const fromCurrent = {
+            x: nextPoint.x - currentPoint.x,
+            y: nextPoint.y - currentPoint.y,
+          }
+
+          // Add line to approach the corner
+          const approachDistance = Math.min(radius, Math.abs(toCurrent.x) / 2, Math.abs(toCurrent.y) / 2)
+          const approachX = currentPoint.x - Math.sign(toCurrent.x) * approachDistance
+          const approachY = currentPoint.y - Math.sign(toCurrent.y) * approachDistance
+
+          path += ` L ${approachX} ${approachY}`
+
+          // Add rounded corner
+          const exitDistance = Math.min(radius, Math.abs(fromCurrent.x) / 2, Math.abs(fromCurrent.y) / 2)
+          const exitX = currentPoint.x + Math.sign(fromCurrent.x) * exitDistance
+          const exitY = currentPoint.y + Math.sign(fromCurrent.y) * exitDistance
+
+          if (approachDistance > 0 && exitDistance > 0) {
+            const sweep = toCurrent.x * fromCurrent.y - toCurrent.y * fromCurrent.x > 0 ? 1 : 0
+            path += ` A ${radius} ${radius} 0 0 ${sweep} ${exitX} ${exitY}`
+          } else {
+            path += ` L ${currentPoint.x} ${currentPoint.y}`
+          }
+
+          prevPoint = currentPoint
+        }
+
+        path += ` L ${end.x} ${end.y}`
+      }
+    } else {
+      // Fallback to simple line
+      path += ` L ${end.x} ${end.y}`
+    }
+
+    return path
+  }
+
+  const calculatePath = () => {
+    const arcMode = arc.mode || "CURVILIGNE" // Default to CURVILIGNE if mode not specified
+
+    if (arcMode === "RECTANGULAIRE") {
+      const isSourceTransition = transitions.some((transition) => transition.id === source.id)
+      const isTargetTransition = transitions.some((transition) => transition.id === target.id)
+
+      const sourceDirection = isSourceTransition ? "BAS" : arc.source_direction || "BAS"
+      const targetDirection = isTargetTransition ? "HAUT" : "HAUT"
+
+      const start = calculateDirectionPosition(source, sourceDirection, true)
+      const end = calculateDirectionPosition(target, targetDirection, false)
+
+      const rectangularPath = calculateRectangularPath(start, end, controlPoints)
+
+      const pathLength = calculatePathLength(rectangularPath)
+      const midPoint = getPointAtDistance(rectangularPath, pathLength / 2)
+
+      return {
+        path: rectangularPath,
+        midPoint: midPoint || { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
+        isCurved: controlPoints && controlPoints.length > 0,
+        start,
+        end,
+      }
+    } else {
+      // Use original curviligne implementation
+      return calculateCurvedPath()
     }
   }
 
@@ -212,8 +388,6 @@ const Arc = ({
       }
     }
   }
-
-  const pathData = calculateCurvedPath()
 
   const getFixedControlPointPosition = (index, totalPoints) => {
     const positions = [0.25, 0.5, 0.75]
@@ -398,7 +572,7 @@ const Arc = ({
     event.preventDefault()
     event.stopPropagation()
     if (onContextMenu) {
-      console.log(canBeInhibitor())
+      console.log("[v0] Arc context menu triggered", { canBeInhibitor: canBeInhibitor(), arc })
       onContextMenu(event, "arc", arc, {
         canBeInhibitor: canBeInhibitor(),
         currentDirection: arc.source_direction || "BAS",
@@ -459,6 +633,72 @@ const Arc = ({
     return selected ? "#3b82f6" : getArcColor()
   }
 
+  useEffect(() => {
+    const newPathData = calculatePath()
+    setPathData(newPathData)
+  }, [arc, source, target, places, transitions, controlPoints])
+
+  // Helper functions for better path midpoint calculation
+  const calculatePathLength = (pathString) => {
+    // Simplified path length calculation for rectangular paths
+    const commands = pathString.split(/[ML]/).filter((cmd) => cmd.trim())
+    let totalLength = 0
+    let lastPoint = null
+
+    commands.forEach((cmd) => {
+      const coords = cmd
+        .trim()
+        .split(/[\s,]+/)
+        .map(Number)
+      if (coords.length >= 2) {
+        const currentPoint = { x: coords[0], y: coords[1] }
+        if (lastPoint) {
+          const dx = currentPoint.x - lastPoint.x
+          const dy = currentPoint.y - lastPoint.y
+          totalLength += Math.sqrt(dx * dx + dy * dy)
+        }
+        lastPoint = currentPoint
+      }
+    })
+
+    return totalLength
+  }
+
+  const getPointAtDistance = (pathString, targetDistance) => {
+    // Get point at specific distance along rectangular path
+    const commands = pathString.split(/[ML]/).filter((cmd) => cmd.trim())
+    let currentDistance = 0
+    let lastPoint = null
+
+    for (const cmd of commands) {
+      const coords = cmd
+        .trim()
+        .split(/[\s,]+/)
+        .map(Number)
+      if (coords.length >= 2) {
+        const currentPoint = { x: coords[0], y: coords[1] }
+        if (lastPoint) {
+          const dx = currentPoint.x - lastPoint.x
+          const dy = currentPoint.y - lastPoint.y
+          const segmentLength = Math.sqrt(dx * dx + dy * dy)
+
+          if (currentDistance + segmentLength >= targetDistance) {
+            // Target point is on this segment
+            const ratio = (targetDistance - currentDistance) / segmentLength
+            return {
+              x: lastPoint.x + dx * ratio,
+              y: lastPoint.y + dy * ratio,
+            }
+          }
+          currentDistance += segmentLength
+        }
+        lastPoint = currentPoint
+      }
+    }
+
+    return lastPoint // Fallback to last point
+  }
+
   return (
     <div className="arc-container">
       <svg
@@ -509,7 +749,8 @@ const Arc = ({
           onMouseDown={handleMouseDown}
           style={{
             strokeDasharray: arc.is_inhibitor ? "5,5" : "none",
-            cursor: "pointer", // Ensure pointer cursor is visible
+            cursor: "pointer",
+            strokeLinecap: "round", // Added rounded line caps for better appearance
           }}
         />
 
@@ -523,7 +764,7 @@ const Arc = ({
           onContextMenu={handleContextMenu}
           onMouseDown={handleMouseDown}
           style={{
-            cursor: "pointer", // Add pointer cursor to wide invisible line
+            cursor: "pointer",
           }}
         />
 
@@ -552,11 +793,11 @@ const Arc = ({
         style={{
           left: pathData.midPoint.x - 15,
           top: pathData.midPoint.y - 15,
-          cursor: "pointer", // Add pointer cursor to weight
+          cursor: "pointer",
         }}
         onClick={handleWeightClick}
         onMouseDown={handleWeightMouseDown}
-        onContextMenu={handleWeightContextMenu} // Add context menu to weight
+        onContextMenu={handleWeightContextMenu}
       >
         {isEditingWeight ? (
           <div className="weight-form-container">
@@ -568,7 +809,7 @@ const Arc = ({
                 autoFocus
                 min="1"
                 className="weight-input"
-                onContextMenu={(e) => e.stopPropagation()} // Prevent context menu on input to avoid conflicts
+                onContextMenu={(e) => e.stopPropagation()}
               />
               <div className="weight-form-buttons">
                 <button type="submit" className="weight-form-button weight-form-save">

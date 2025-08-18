@@ -52,6 +52,10 @@ const PetriEditor = () => {
 
   const [isArcDragging, setIsArcDragging] = useState(false) // Added state to track when an arc is being dragged
 
+  const simulationIntervalRef = useRef(null)
+  const getEnabledTransitionsRef = useRef(null)
+  const fireTransitionRef = useRef(null)
+
   const handleThemeLoad = useCallback((loadedThemeData) => {
     console.log("[v0] Loading theme data:", loadedThemeData)
     setThemeData(loadedThemeData)
@@ -190,17 +194,6 @@ const PetriEditor = () => {
     })
   }, [arcs, places, transitions])
 
-  const addNotification = useCallback((message, type = "info") => {
-    const id = Date.now()
-    const notification = { id, message, type }
-    setNotifications((prev) => [...prev, notification])
-
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== id))
-    }, 3000)
-  }, [])
-
   const fireTransition = useCallback(
     async (transition) => {
       const inputArcs = arcs.filter((arc) => arc.target_id === transition.id_in_net)
@@ -275,53 +268,54 @@ const PetriEditor = () => {
 
       checkValidation()
     },
-    [arcs, places, checkValidation, addNotification],
+    [arcs, places, checkValidation],
   )
 
   const playSimulation = useCallback(() => {
-    // Clear any existing interval first
-    if (simulationInterval) {
-      clearInterval(simulationInterval)
+    if (simulationIntervalRef.current) {
+      clearInterval(simulationIntervalRef.current)
+      simulationIntervalRef.current = null
       setSimulationInterval(null)
     }
 
     const runSimulationStep = async () => {
-      const enabledTransitions = getEnabledTransitions()
+      const enabledTransitions = getEnabledTransitionsRef.current()
 
       if (enabledTransitions.length === 0) {
         console.log("[v0] No enabled transitions - stopping simulation")
         addNotification("Simulation terminée : deadlock atteint", "info")
-        clearInterval(simulationInterval)
-        setSimulationInterval(null)
+        if (simulationIntervalRef.current) {
+          clearInterval(simulationIntervalRef.current)
+          simulationIntervalRef.current = null
+          setSimulationInterval(null)
+        }
         setIsSimulating(false)
         return
       }
-
-      // Randomly select an enabled transition to fire
-      const randomIndex = Math.floor(Math.random() * enabledTransitions.length)
-      const selectedTransition = enabledTransitions[randomIndex]
+      const selectedTransition = enabledTransitions[0]
 
       console.log(`[v0] Auto-firing transition: ${selectedTransition.label}`)
-      await fireTransition(selectedTransition)
+      await fireTransitionRef.current(selectedTransition)
     }
 
-    const interval = setInterval(runSimulationStep, 1500) // Slightly slower for better visibility
-
+    const interval = setInterval(runSimulationStep, 1500)
+    simulationIntervalRef.current = interval
     setSimulationInterval(interval)
     setIsSimulating(true)
     addNotification("Simulation automatique démarrée", "info")
     console.log("[v0] Continuous simulation started - will run until deadlock")
-  }, [getEnabledTransitions, fireTransition, simulationInterval, addNotification])
+  }, [])
 
   const pauseSimulation = useCallback(() => {
-    if (simulationInterval) {
-      clearInterval(simulationInterval)
+    if (simulationIntervalRef.current) {
+      clearInterval(simulationIntervalRef.current)
+      simulationIntervalRef.current = null
       setSimulationInterval(null)
     }
     setIsSimulating(false)
     addNotification("Simulation en pause", "info")
     console.log("[v0] Simulation paused")
-  }, [simulationInterval, addNotification])
+  }, [])
 
   const stepSimulation = useCallback(() => {
     const enabledTransitions = getEnabledTransitions()
@@ -335,7 +329,7 @@ const PetriEditor = () => {
     // Fire the first enabled transition (or could be random)
     const transitionToFire = enabledTransitions[0]
     fireTransition(transitionToFire)
-  }, [getEnabledTransitions, fireTransition, addNotification])
+  }, [getEnabledTransitions, fireTransition])
 
   const exportJSON = useCallback(async () => {
     const data = {
@@ -588,6 +582,7 @@ const PetriEditor = () => {
               weight: 1,
               is_inhibitor: false,
               is_reset: false,
+              mode: "CURVILIGNE", // Added default mode for new arcs
             }
 
             try {
@@ -911,6 +906,23 @@ const PetriEditor = () => {
     setIsArcDragging(false)
   }, [])
 
+  const handleToggleMode = useCallback(
+    (arcId) => {
+      const arc = arcs.find((a) => a.id === arcId)
+      if (arc) {
+        const newMode = arc.mode === "RECTANGULAIRE" ? "CURVILIGNE" : "RECTANGULAIRE"
+        console.log("[v0] Toggling arc mode", { arcId, currentMode: arc.mode, newMode })
+        updateElement(arcId, { mode: newMode }, "arc")
+      }
+    },
+    [arcs, updateElement],
+  )
+
+  useEffect(() => {
+    getEnabledTransitionsRef.current = getEnabledTransitions
+    fireTransitionRef.current = fireTransition
+  }, [getEnabledTransitions, fireTransition])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas) {
@@ -936,12 +948,20 @@ const PetriEditor = () => {
 
   useEffect(() => {
     return () => {
-      if (simulationInterval) {
-        clearInterval(simulationInterval)
+      if (simulationIntervalRef.current) {
+        clearInterval(simulationIntervalRef.current)
         console.log("[v0] Cleaned up simulation interval on component unmount")
       }
     }
-  }, [simulationInterval])
+  }, [])
+
+  const addNotification = useCallback((message, type) => {
+    const notificationId = Date.now()
+    setNotifications((prev) => [...prev, { id: notificationId, message, type }])
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId))
+    }, 5000)
+  }, [])
 
   return (
     <div className="petri-editor">
@@ -1167,6 +1187,7 @@ const PetriEditor = () => {
         onEditWeight={handleEditWeight}
         onToggleInhibitor={handleToggleInhibitor}
         onToggleReset={handleToggleReset}
+        onToggleMode={handleToggleMode} // Added onToggleMode prop
         canBeInhibitor={canBeInhibitor}
       />
     </div>

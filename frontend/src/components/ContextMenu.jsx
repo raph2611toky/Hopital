@@ -16,6 +16,7 @@ const ContextMenu = ({
   onEditWeight,
   onToggleInhibitor,
   onToggleReset,
+  onToggleMode, // Added onToggleMode prop for arc mode switching
   canBeInhibitor,
 }) => {
   if (!visible) return null
@@ -25,8 +26,8 @@ const ContextMenu = ({
     onClose()
   }
 
-  const handleArcAction = (action, arcId) => {
-    action(arcId)
+  const handleArcAction = (action, elementId) => {
+    action(elementId)
     onClose()
   }
 
@@ -61,6 +62,11 @@ const ContextMenu = ({
             <button className="context-menu-item" onClick={() => handleArcAction(onEditWeight, element.id)}>
               <span className="menu-icon">✏️</span>
               Modifier le poids ({element.weight})
+            </button>
+            <div className="menu-divider"></div>
+            <button className="context-menu-item" onClick={() => handleArcAction(onToggleMode, element.id)}>
+              <span className="menu-icon">{element.mode === "RECTANGULAIRE" ? "📐" : "〰️"}</span>
+              Mode: {element.mode === "RECTANGULAIRE" ? "Rectangulaire" : "Curviligne"}
             </button>
             <div className="menu-divider"></div>
             <button

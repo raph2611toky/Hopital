@@ -14,7 +14,7 @@ const PropertiesPanel = ({ selected, selectedType, onUpdate, onDelete }) => {
 
   const handleSave = () => {
     if (selected && hasChanges) {
-      onUpdate(selected.id, editedValues, selectedType)
+      onUpdate(selected.id, editedValues)
       setEditedValues({})
       setHasChanges(false)
     }
@@ -227,11 +227,25 @@ const PropertiesPanel = ({ selected, selectedType, onUpdate, onDelete }) => {
             </div>
 
             <div className="property-group">
+              <label htmlFor="mode">Mode de rendu</label>
+              <select
+                id="mode"
+                value={getValue("mode") || "CURVILIGNE"}
+                onChange={(e) => handleInputChange("mode", e.target.value)}
+                className="property-select"
+              >
+                <option value="CURVILIGNE">Curviligne</option>
+                <option value="RECTANGULAIRE">Rectangulaire</option>
+              </select>
+            </div>
+
+            {/* Fix property names to match backend API */}
+            <div className="property-group">
               <label className="checkbox-label">
                 <input
                   type="checkbox"
-                  checked={getValue("isInhibitor") || false}
-                  onChange={(e) => handleInputChange("isInhibitor", e.target.checked)}
+                  checked={getValue("is_inhibitor") || false}
+                  onChange={(e) => handleInputChange("is_inhibitor", e.target.checked)}
                 />
                 Arc inhibiteur
               </label>
@@ -241,22 +255,22 @@ const PropertiesPanel = ({ selected, selectedType, onUpdate, onDelete }) => {
               <label className="checkbox-label">
                 <input
                   type="checkbox"
-                  checked={getValue("isReset") || false}
-                  onChange={(e) => handleInputChange("isReset", e.target.checked)}
+                  checked={getValue("is_reset") || false}
+                  onChange={(e) => handleInputChange("is_reset", e.target.checked)}
                 />
                 Arc de remise à zéro
               </label>
             </div>
 
-            {getValue("isReset") && (
+            {getValue("is_reset") && (
               <div className="property-group">
                 <label htmlFor="resetValue">Valeur de remise à zéro</label>
                 <input
                   id="resetValue"
                   type="number"
                   min="0"
-                  value={getValue("resetValue") || 0}
-                  onChange={(e) => handleInputChange("resetValue", Number.parseInt(e.target.value) || 0)}
+                  value={getValue("reset_value") || 0}
+                  onChange={(e) => handleInputChange("reset_value", Number.parseInt(e.target.value) || 0)}
                   className="property-input"
                 />
               </div>

@@ -6,7 +6,7 @@ class ArcSerializer(serializers.ModelSerializer):
         model = Arc
         fields = [
             'id', 'petri_net', 'id_in_net', 'source_id', 'target_id', 'control_points', 'weight',
-            'is_inhibitor', 'is_reset', 'source_direction', 'created_at'
+            'is_inhibitor', 'is_reset', 'source_direction', 'mode', 'created_at'
         ]
 
 class PlaceSerializer(serializers.ModelSerializer):
