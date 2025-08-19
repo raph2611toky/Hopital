@@ -12,11 +12,29 @@ const Place = ({
   selected,
   isConnecting,
   isDragged,
-  isActive, // New prop for active state
-  isFull, // New prop for full state
-  updateElement, // New prop for updateElement function
+  isActive,
+  isFull, 
+  updateElement, 
+  arcs = [], 
 }) => {
   const placeRef = useRef(null)
+
+  const getLabelPosition = (placeId, arcs) => {
+    const incomingArcs = arcs.filter((arc) => arc.target_id === placeId)
+    const outgoingArcs = arcs.filter((arc) => arc.source_id === placeId)
+
+    if (outgoingArcs.length > 0 && incomingArcs.length === 0) {
+      return { position: "above", className: "label-above" }
+    } else if (incomingArcs.length > 0 && outgoingArcs.length === 0) {
+      return { position: "below", className: "label-below" }
+    } else if (incomingArcs.length > 0 || outgoingArcs.length > 0) {
+      const isLeft = place.position.x > 300
+      return { position: "side", className: isLeft ? "label-left" : "label-right" }
+    } else {
+      // Default position for places with no arcs
+      return { position: "below", className: "label-below" }
+    }
+  }
 
   const handleMouseDown = (event) => {
     event.stopPropagation()
@@ -188,6 +206,8 @@ const Place = ({
     return classes
   }
 
+  const labelPositioning = getLabelPosition(place.id_in_net, arcs)
+
   return (
     <div
       ref={placeRef}
@@ -196,6 +216,7 @@ const Place = ({
         left: place.position.x - 33,
         top: place.position.y - 33,
         cursor: isDragged ? "grabbing" : isConnecting ? "crosshair" : "pointer",
+        zIndex: isDragged ? 1000 : 1, // Ensure dragged elements appear on top
       }}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
@@ -204,7 +225,17 @@ const Place = ({
       title={place.label}
     >
       <div className="place-circle">{renderTokens()}</div>
-      <div className="place-label">{place.label}</div>
+      <div
+        className={`place-label ${labelPositioning.className}`}
+        style={{
+          ...(labelPositioning.position === "side" && {
+            left: labelPositioning.className === "label-left" ? "-40px" : "100%",
+            transform: labelPositioning.className === "label-left" ? "translateX(-100%)" : "translateX(0)",
+          }),
+        }}
+      >
+        {place.label}
+      </div>
     </div>
   )
 }

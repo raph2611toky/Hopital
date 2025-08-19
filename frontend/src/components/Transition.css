@@ -102,8 +102,6 @@
 
 .transition-label {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   font-size: 12px;
   font-weight: 500;
   color: #374151;
@@ -113,14 +111,52 @@
   border-radius: 4px;
   border: 1px solid #e5e7eb;
   transition: all 0.3s ease;
+  z-index: 10; /* Ensure labels appear above other elements */
 }
 
-.transition.portrait .transition-label {
-  top: 63px; /* Adjusted for portrait container size */
+/* Added dynamic label positioning classes */
+.transition-label.label-above {
+  top: -25px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
 }
 
-.transition.landscape .transition-label {
-  top: 43px; /* Adjusted for landscape container size */
+.transition-label.label-below {
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+.transition.portrait .transition-label.label-below {
+  top: 63px !important;
+}
+
+.transition.landscape .transition-label.label-below {
+  top: 43px !important;
+}
+
+.transition-label.label-left {
+  left: -40px !important;
+  top: 50% !important;
+  transform: translateY(-50%) translateX(-100%) !important;
+}
+
+.transition-label.label-right {
+  left: 100% !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+
+/* Default label positioning for transitions without dynamic classes */
+.transition.portrait .transition-label:not(.label-above):not(.label-below):not(.label-left):not(.label-right) {
+  top: 63px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.transition.landscape .transition-label:not(.label-above):not(.label-below):not(.label-left):not(.label-right) {
+  top: 43px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .transition-timer {

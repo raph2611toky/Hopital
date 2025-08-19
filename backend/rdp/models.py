@@ -99,7 +99,7 @@ class Arc(models.Model):
         choices=[('HAUT', 'Haut'), ('GAUCHE', 'Gauche'), ('DROITE', 'Droite'), ('BAS', 'Bas')],
         default='BAS'
     )
-    mode = models.CharField(max_length=50, choices=[(x,x)for x in ['CURVILIGNE', 'RECTANGULAIRE']], default="CURVILIGNE")
+    mode = models.CharField(max_length=50, choices=[(x,x)for x in ['CURVILIGNE', 'RECTANGULAIRE']], default="RECTANGULAIRE")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

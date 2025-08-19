@@ -298,7 +298,7 @@ const PetriEditor = () => {
       await fireTransitionRef.current(selectedTransition)
     }
 
-    const interval = setInterval(runSimulationStep, 1500)
+    const interval = setInterval(runSimulationStep, 3000)
     simulationIntervalRef.current = interval
     setSimulationInterval(interval)
     setIsSimulating(true)
@@ -351,8 +351,101 @@ const PetriEditor = () => {
     if (typeof window !== "undefined" && canvasRef.current) {
       try {
         const html2canvas = (await import("html2canvas")).default
-        const canvas = await html2canvas(canvasRef.current)
-        const url = canvas.toDataURL("image/png")
+
+        const calculateElementsBounds = () => {
+          let minX = Number.POSITIVE_INFINITY,
+            minY = Number.POSITIVE_INFINITY,
+            maxX = Number.NEGATIVE_INFINITY,
+            maxY = Number.NEGATIVE_INFINITY
+
+          // Include places
+          places.forEach((place) => {
+            const radius = 30
+            minX = Math.min(minX, place.position.x - radius)
+            minY = Math.min(minY, place.position.y - radius)
+            maxX = Math.max(maxX, place.position.x + radius)
+            maxY = Math.max(maxY, place.position.y + radius)
+          })
+
+          // Include transitions
+          transitions.forEach((transition) => {
+            const isLandscape = transition.orientation === "landscape"
+            const halfWidth = isLandscape ? 25 : 15
+            const halfHeight = isLandscape ? 15 : 25
+            minX = Math.min(minX, transition.position.x - halfWidth)
+            minY = Math.min(minY, transition.position.y - halfHeight)
+            maxX = Math.max(maxX, transition.position.x + halfWidth)
+            maxY = Math.max(maxY, transition.position.y + halfHeight)
+          })
+
+          // Include arcs and their control points
+          arcs.forEach((arc) => {
+            const sourceElement = [...places, ...transitions].find((el) => el.id === arc.source_id)
+            const targetElement = [...places, ...transitions].find((el) => el.id === arc.target_id)
+
+            if (sourceElement && targetElement) {
+              // Include source and target positions
+              minX = Math.min(minX, sourceElement.position.x, targetElement.position.x)
+              minY = Math.min(minY, sourceElement.position.y, targetElement.position.y)
+              maxX = Math.max(maxX, sourceElement.position.x, targetElement.position.x)
+              maxY = Math.max(maxY, sourceElement.position.y, targetElement.position.y)
+
+              // Include control points if they exist
+              if (arc.control_points && arc.control_points.length > 0) {
+                arc.control_points.forEach((cp) => {
+                  minX = Math.min(minX, cp.x)
+                  minY = Math.min(minY, cp.y)
+                  maxX = Math.max(maxX, cp.x)
+                  maxY = Math.max(maxY, cp.y)
+                })
+              }
+            }
+          })
+
+          // Add padding around the bounds
+          const padding = 50
+          return {
+            minX: minX - padding,
+            minY: minY - padding,
+            maxX: maxX + padding,
+            maxY: maxY + padding,
+            width: maxX - minX + padding * 2,
+            height: maxY - minY + padding * 2,
+          }
+        }
+
+        const bounds = calculateElementsBounds()
+        const canvas = canvasRef.current
+        const originalOverflow = canvas.style.overflow
+        const originalWidth = canvas.style.width
+        const originalHeight = canvas.style.height
+
+        // Temporarily adjust canvas to fit all elements
+        canvas.style.overflow = "visible"
+        canvas.style.width = `${bounds.width * transform.scale}px`
+        canvas.style.height = `${bounds.height * transform.scale}px`
+
+        // Adjust transform to center the content properly for capture
+        const canvasElement = canvas.querySelector(".canvas")
+        const originalTransform = canvasElement.style.transform
+        canvasElement.style.transform = `translate(${-bounds.minX * transform.scale + transform.x}px, ${-bounds.minY * transform.scale + transform.y}px) scale(${transform.scale})`
+
+        // Capture with proper bounds
+        const capturedCanvas = await html2canvas(canvas, {
+          width: bounds.width * transform.scale,
+          height: bounds.height * transform.scale,
+          useCORS: true,
+          allowTaint: true,
+          scale: 1,
+        })
+
+        // Restore original styles
+        canvas.style.overflow = originalOverflow
+        canvas.style.width = originalWidth
+        canvas.style.height = originalHeight
+        canvasElement.style.transform = originalTransform
+
+        const url = capturedCanvas.toDataURL("image/png")
         const a = document.createElement("a")
         a.href = url
         a.download = "petri-net.png"
@@ -362,7 +455,7 @@ const PetriEditor = () => {
         console.error("Export PNG nécessite l'installation de html2canvas")
       }
     }
-  }, [])
+  }, [places, transitions, arcs, transform])
 
   const duplicateElement = useCallback(
     async (id, type) => {
@@ -582,7 +675,7 @@ const PetriEditor = () => {
               weight: 1,
               is_inhibitor: false,
               is_reset: false,
-              mode: "CURVILIGNE", // Added default mode for new arcs
+              mode: "RECTANGULAIRE", 
             }
 
             try {
@@ -1014,9 +1107,9 @@ const PetriEditor = () => {
         </div>
       </div>
 
-      {(validation.deadlock || validation.concurrent > 0 || !validation.bounded) && (
+      {(validation.concurrent > 0 || !validation.bounded) && (
         <div className="validation-status">
-          {validation.deadlock && <div className="validation-error">⚠️ Deadlock détecté</div>}
+          {/* {validation.deadlock && <div className="validation-error">⚠️ Deadlock détecté</div>} */}
           {validation.concurrent > 0 && (
             <div className="validation-info">🔄 Concurrence: {validation.concurrent} transitions</div>
           )}
@@ -1122,6 +1215,7 @@ const PetriEditor = () => {
                   isActive={isInvolvedInTransition}
                   isFull={place.capacity && place.tokens >= place.capacity}
                   updateElement={updateElement}
+                  arcs={arcs}
                 />
               )
             })}
@@ -1144,6 +1238,7 @@ const PetriEditor = () => {
                   isEnabled={isEnabled}
                   isFiring={firingTransitionId === transition.id}
                   onUpdate={updateElement}
+                  arcs={arcs}
                 />
               )
             })}
@@ -1187,7 +1282,7 @@ const PetriEditor = () => {
         onEditWeight={handleEditWeight}
         onToggleInhibitor={handleToggleInhibitor}
         onToggleReset={handleToggleReset}
-        onToggleMode={handleToggleMode} // Added onToggleMode prop
+        onToggleMode={handleToggleMode} 
         canBeInhibitor={canBeInhibitor}
       />
     </div>

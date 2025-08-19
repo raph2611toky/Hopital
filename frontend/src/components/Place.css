@@ -92,9 +92,6 @@
 
 .place-label {
   position: absolute;
-  top: 70px;
-  left: 50%;
-  transform: translateX(-50%);
   font-size: 12px;
   font-weight: 500;
   color: #374151;
@@ -103,6 +100,39 @@
   padding: 2px 6px;
   border-radius: 4px;
   border: 1px solid #e5e7eb;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.place-label.label-above {
+  top: -25px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+.place-label.label-below {
+  top: 70px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+.place-label.label-left {
+  left: -40px !important;
+  top: 50% !important;
+  transform: translateY(-50%) translateX(-100%) !important;
+}
+
+.place-label.label-right {
+  left: 100% !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+
+/* Default label positioning (fallback) */
+.place-label:not(.label-above):not(.label-below):not(.label-left):not(.label-right) {
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 /* Enhanced token animations with smooth transitions */

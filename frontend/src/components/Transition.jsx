@@ -15,8 +15,27 @@ const Transition = ({
   isEnabled,
   isFiring,
   onUpdate,
+  arcs = [], // Added arcs prop for dynamic label positioning
 }) => {
   const transitionRef = useRef(null)
+
+  const getLabelPosition = (transitionId, arcs) => {
+    const incomingArcs = arcs.filter((arc) => arc.target_id === transitionId)
+    const outgoingArcs = arcs.filter((arc) => arc.source_id === transitionId)
+
+    if (outgoingArcs.length > 0 && incomingArcs.length === 0) {
+      return { position: "above", className: "label-above" }
+    } else if (incomingArcs.length > 0 && outgoingArcs.length === 0) {
+      return { position: "below", className: "label-below" }
+    } else if (incomingArcs.length > 0 || outgoingArcs.length > 0) {
+      // Place to the side based on position
+      const isLeft = transition.position.x > 300
+      return { position: "side", className: isLeft ? "label-left" : "label-right" }
+    } else {
+      // Default position for transitions with no arcs
+      return { position: "below", className: "label-below" }
+    }
+  }
 
   const handleMouseDown = (event) => {
     event.stopPropagation()
@@ -64,6 +83,8 @@ const Transition = ({
     return classes
   }
 
+  const labelPositioning = getLabelPosition(transition.id_in_net, arcs)
+
   return (
     <div
       ref={transitionRef}
@@ -72,6 +93,7 @@ const Transition = ({
         left: transition.position.x - offsetX,
         top: transition.position.y - offsetY,
         cursor: isDragged ? "grabbing" : isConnecting ? "crosshair" : "pointer",
+        zIndex: isDragged ? 1000 : 1, // Ensure dragged elements appear on top
       }}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
@@ -82,7 +104,18 @@ const Transition = ({
       <div className="transition-rect" onClick={() => handleUpdate({ type: "timed" })}>
         {transition.type === "timed" && <div className="transition-timer">⏱</div>}
       </div>
-      <div className="transition-label">{transition.label}</div>
+      <div
+        className={`transition-label ${labelPositioning.className}`}
+        style={{
+          ...(labelPositioning.position === "side" && {
+            left: labelPositioning.className === "label-left" ? "-40px" : "100%",
+            transform: labelPositioning.className === "label-left" ? "translateX(-100%)" : "translateX(0)",
+            top: isLandscape ? "43px" : "63px",
+          }),
+        }}
+      >
+        {transition.label}
+      </div>
     </div>
   )
 }
